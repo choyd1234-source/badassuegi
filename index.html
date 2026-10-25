@@ -1,0 +1,3782 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>녹음 받아쓰기</title>
+<meta name="description" content="녹음 파일이나 실시간 녹음을 기기 안에서 한국어 텍스트로 바꿔 주는 웹앱">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="받아쓰기">
+<meta name="theme-color" content="#17202e">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Myeongjo:wght@400;700;800&display=swap">
+<style>
+/* layout: one reading column; the recording's length is drawn as a tape strip
+   between the file card and the transcript, so progress reads in hours, not % */
+:root {
+  --paper: #f2f4f7;
+  --sheet: #ffffff;
+  --ink: #17202e;
+  --muted: #586274;
+  --faint: #8790a1;
+  --rule: #dce1e8;
+  --tape: #23467f;
+  --tape-scan: #c5d1e6;
+  --rec: #cf3a2e;
+  --ok: #2d7650;
+  --note-bg: #eef2f8;
+  --focus: #3768d4;
+  --ok-bg: #e3f1e9;
+  --rec-bg: #fbe7e5;
+  --tape-bg: #e3eaf6;
+  --unsure: #9a5b00;
+  --unsure-bg: #fcefd2;
+  --fix: #24704a;
+  --fix-bg: #dcf2e5;
+  --display: "Nanum Myeongjo", "AppleMyungjo", "Batang", serif;
+  --read: "Nanum Myeongjo", "AppleMyungjo", "Batang", serif;
+  --ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1219; --sheet: #151a23; --ink: #e4e8ef; --muted: #a0a9ba; --faint: #6f788a;
+    --rule: #252c39; --tape: #88a9e6; --tape-scan: #2a3650; --rec: #ff6b5d; --ok: #6cc394;
+    --note-bg: #1a2130; --focus: #92b2ff; --ok-bg: #16291f; --rec-bg: #3a1c1a; --tape-bg: #1c2a44;
+    --unsure: #f1b75e; --unsure-bg: #3a2b10; --fix: #7cd4a3; --fix-bg: #15301f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1219; --sheet: #151a23; --ink: #e4e8ef; --muted: #a0a9ba; --faint: #6f788a;
+  --rule: #252c39; --tape: #88a9e6; --tape-scan: #2a3650; --rec: #ff6b5d; --ok: #6cc394;
+  --note-bg: #1a2130; --focus: #92b2ff; --ok-bg: #16291f; --rec-bg: #3a1c1a; --tape-bg: #1c2a44;
+  --unsure: #f1b75e; --unsure-bg: #3a2b10; --fix: #7cd4a3; --fix-bg: #15301f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--paper); color: var(--ink); font-family: var(--ui); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+.wrap {
+  max-width: 46rem; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 36px 140px;
+  display: flex; flex-direction: column; gap: 28px;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* masthead */
+.mast { display: flex; flex-direction: column; gap: 10px; }
+.kicker { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; font-family: var(--mono); }
+.rec { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); flex: none; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 6vw, 2.6rem); line-height: 1.15; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 36em; text-wrap: pretty; }
+
+/* file card */
+.drop {
+  background: var(--sheet); border: 1.5px dashed var(--rule); border-radius: 14px;
+  padding: 26px 22px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start;
+  transition: border-color .15s, background .15s;
+}
+.drop.over { border-color: var(--tape); background: var(--note-bg); }
+.drop-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.hint { color: var(--muted); font-size: 14px; }
+.fine { margin: 0; color: var(--faint); font-size: 13px; }
+.btn {
+  border: 1px solid var(--ink); background: var(--ink); color: var(--sheet);
+  border-radius: 999px; padding: 10px 20px; font-weight: 600; font-size: 15px; line-height: 1.2;
+}
+.btn:hover { filter: brightness(1.15); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); font-weight: 500; }
+.btn.ghost:hover { border-color: var(--ink); filter: none; }
+.btn.small { padding: 7px 14px; font-size: 14px; }
+.btn[disabled] { opacity: .45; cursor: default; filter: none; }
+/* The real file input lies over its button, so a tap lands on the native
+   control itself; some phone browsers and in-app views ignore a scripted click. */
+.pick { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pick input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 100%; min-height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; font-size: 16px; }
+.pick:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pick:active { filter: brightness(1.25); }
+.btn.ghost.pick:active { filter: none; border-color: var(--ink); }
+@media (hover: none) and (pointer: coarse) { .drag-only { display: none; } }
+.tip { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink); background: var(--note-bg); border-radius: 10px; padding: 10px 12px; width: 100%; }
+.env { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--rec); background: var(--sheet); padding: 14px; }
+.env p { margin: 0; }
+.env ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+.env a.btn { text-decoration: none; display: inline-flex; align-self: flex-start; }
+.diag { font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.file { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; }
+.fname { font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+.fmeta { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { background: var(--note-bg); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--ink); width: 100%; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.note p { margin: 0; flex: 1 1 16em; min-width: 0; }
+.err { color: var(--rec); font-size: 14px; margin: 0; }
+
+/* mode tabs (standalone app only) */
+.modes { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--note-bg); align-self: flex-start; }
+.modes button { border: 0; background: transparent; border-radius: 999px; padding: 8px 16px; font-size: 14.5px; font-weight: 500; color: var(--muted); }
+.modes button[aria-selected="true"] { background: var(--sheet); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.pane { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; width: 100%; }
+.live-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; }
+.rec-btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; font-size: 16px; }
+.rec-btn .rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--rec); flex: none; }
+.rec-btn[data-on="true"] { background: var(--rec); border-color: var(--rec); color: #fff; }
+.rec-btn[data-on="true"] .rec-dot { background: #fff; border-radius: 2px; }
+.live-meta { display: flex; align-items: center; gap: 12px; }
+.live-time { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; min-width: 4.5ch; }
+.meter { width: 120px; height: 8px; border-radius: 4px; background: var(--note-bg); overflow: hidden; }
+.meter span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .12s linear; }
+@media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
+
+/* status / tape */
+.status { display: flex; flex-direction: column; gap: 14px; }
+.stage { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 2px; font-weight: 600; }
+.stage-sub:empty { display: none; }
+.stage-sub { grid-column: 2; }
+.stage .rec { background: var(--faint); }
+.status[data-state="run"] .stage .rec { background: var(--rec); animation: pulse 1.6s ease-in-out infinite; }
+.status[data-state="done"] .stage .rec { background: var(--ok); }
+.status[data-state="error"] .stage .rec { background: var(--rec); }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .status[data-state="run"] .stage .rec { animation: none; } }
+.stage-sub { font-weight: 400; color: var(--muted); font-size: 14px; }
+.tape { display: flex; flex-direction: column; gap: 6px; }
+.track { position: relative; height: 12px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.track .scan, .track .done { position: absolute; inset: 0 auto 0 0; width: 0; }
+.track .scan { background: var(--tape-scan); }
+.track .done { background: var(--tape); }
+.track .start { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dotted var(--sheet); }
+.ticks { position: relative; height: 18px; font-family: var(--mono); font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.ticks span:first-child { transform: none; }
+.ticks span.end { transform: translateX(-100%); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 10px 18px; margin: 0; }
+.stats div { min-width: 0; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 0; font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.status-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* library: one row per recording */
+.lib { display: flex; flex-direction: column; gap: 12px; }
+.lib-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--rule); padding-bottom: 10px; }
+.lib-head h2 { font-family: var(--display); font-weight: 700; font-size: 1.35rem; margin: 0; }
+.lib-count { color: var(--muted); font-size: 13px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lib-list li + li { border-top: 1px solid var(--rule); }
+.lib-item { width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 11px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; align-items: center; }
+.lib-item:hover { background: var(--note-bg); }
+.lib-item[aria-current="true"] { background: var(--note-bg); }
+.lib-title { font-weight: 600; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lib-meta { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lib-preview { grid-column: 1 / -1; font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.chip { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.chip-done { color: var(--ok); background: var(--ok-bg); }
+.chip-part { color: var(--tape); background: var(--tape-bg); }
+.chip-run { color: var(--rec); background: var(--rec-bg); }
+.lib-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.rec-bar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.btn.danger { color: var(--rec); }
+.btn.danger[data-armed="true"] { background: var(--rec); border-color: var(--rec); color: #fff; }
+.rename { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.rename input { flex: 1 1 14em; min-width: 0; font: inherit; font-size: 16px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); }
+
+/* transcript */
+.doc { display: flex; flex-direction: column; gap: 16px; }
+.doc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; border-bottom: 1px solid var(--rule); padding-bottom: 12px; }
+.doc-head h2 { font-family: var(--display); font-weight: 700; font-size: 1.35rem; margin: 0; margin-right: auto; }
+.tag { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--muted); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: var(--tape); width: 16px; height: 16px; }
+.doc-meta { margin: 0; color: var(--muted); font-size: 14px; }
+.paras { display: flex; flex-direction: column; gap: 18px; }
+.para { display: grid; grid-template-columns: 5.6rem minmax(0, 1fr); gap: 2px 14px; margin: 0; }
+.ts {
+  justify-self: start; align-self: start; margin-top: 4px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+  background: none; border: 0; padding: 2px 0; border-bottom: 1px dotted var(--faint); border-radius: 0;
+}
+.ts:hover { color: var(--tape); border-bottom-color: var(--tape); }
+.tx { font-family: var(--read); font-size: 17.5px; line-height: 1.9; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
+.paras.notimes .ts { display: none; }
+.paras.notimes .para { grid-template-columns: minmax(0, 1fr); }
+.paras.example .tx { color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+@media (max-width: 520px) {
+  .para { grid-template-columns: minmax(0, 1fr); }
+  .ts { margin-top: 0; }
+}
+/* words the recognizer was unsure of / words Claude changed */
+.paras mark.unsure { background: none; color: inherit; }
+.paras.marks mark.unsure, .legend mark.unsure { background: var(--unsure-bg); color: inherit; box-shadow: inset 0 -2px 0 var(--unsure); border-radius: 3px; padding: 0 1px; cursor: pointer; }
+.paras ins.fix { text-decoration: none; }
+.paras.marks ins.fix, .legend ins.fix { text-decoration: none; background: var(--fix-bg); color: inherit; box-shadow: inset 0 -2px 0 var(--fix); border-radius: 3px; padding: 0 1px; cursor: pointer; }
+.paras del.cut { display: none; }
+.paras.marks del.cut { display: inline; color: var(--faint); font-size: .8em; cursor: pointer; }
+.paras.example mark.unsure { cursor: default; }
+.legend { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.75; }
+.modes.ver button { font-size: 14px; padding: 7px 14px; }
+
+/* polishing with Claude */
+.polish { background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.polish p { margin: 0; }
+.polish-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.polish-head strong { font-size: 16px; }
+.polish-lede { font-size: 14px; color: var(--muted); }
+.polish-direct, .polish-manual { display: flex; flex-direction: column; gap: 10px; }
+.polish-manual { gap: 14px; }
+.step { display: grid; grid-template-columns: 1.7rem minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14.5px; }
+.step .num { width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--note-bg); display: grid; place-items: center; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.step > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 2px; }
+.part-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.part-list .btn[data-done="true"]::after { content: " ✓"; color: var(--ok); }
+.polish textarea { width: 100%; min-height: 7.5rem; font: inherit; font-size: 16px; line-height: 1.6; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); resize: vertical; }
+.polish textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--tape); text-decoration: underline; text-underline-offset: 3px; font-size: 14px; align-self: flex-start; }
+.polish-msg { font-size: 14px; color: var(--ok); }
+.polish-msg.err { color: var(--rec); }
+
+/* player */
+.player {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--sheet); border-top: 1px solid var(--rule);
+  padding-top: 10px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.player-in { max-width: 46rem; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+.player-name { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12rem; flex: 0 1 auto; min-width: 0; }
+.player audio { flex: 1 1 auto; min-width: 0; height: 36px; }
+@media (max-width: 520px) { .player-name { display: none; } }
+
+footer { border-top: 1px solid var(--rule); padding-top: 16px; color: var(--faint); font-size: 12.5px; display: flex; flex-direction: column; gap: 8px; }
+footer p { margin: 0; }
+footer strong { color: var(--muted); font-weight: 600; }
+details summary { cursor: pointer; color: var(--muted); }
+details pre { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; max-height: 18rem; overflow: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; color: var(--muted); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--sheet); padding: 9px 16px; border-radius: 999px; font-size: 14px; z-index: 9; max-width: calc(100% - 32px); text-align: center; }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="kicker"><span class="rec" aria-hidden="true"></span>REC → TEXT</div>
+    <h1>녹음 받아쓰기</h1>
+    <p class="lede">녹음 파일이나 지금 하는 말을 한국어 텍스트로 바꿔 드려요. 세 시간짜리 강의나 회의도 말이 끊기는 곳마다 잘라서 차례로 받아쓰고, 받아쓴 글은 녹음마다 ‘내 기록’에 저장해 둬요. 녹음 파일은 이 기기 안에서만 처리되고 어디에도 올라가지 않아요.</p>
+  </header>
+
+  <section class="drop" id="drop" aria-label="녹음 파일">
+    <div class="modes" id="modes" role="tablist" aria-label="받아쓰기 방식" hidden>
+      <button type="button" role="tab" id="modeFile" aria-selected="true" aria-controls="filePane">파일 받아쓰기</button>
+      <button type="button" role="tab" id="modeLive" aria-selected="false" aria-controls="livePane">실시간 녹음</button>
+    </div>
+    <div class="pane" id="filePane" role="tabpanel">
+    <div id="pickView" class="drop-row">
+      <label class="btn pick" id="pickBtn">녹음 파일 고르기<input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.m4a,.mp4,.mov,.wav,.aac,.3gp,.amr,.ogg,.opus,.webm,.flac"></label>
+      <span class="hint drag-only">또는 여기에 끌어다 놓기</span>
+    </div>
+    <div id="fileView" class="file" hidden>
+      <div class="fname" id="fname"></div>
+      <div class="fmeta" id="fmeta"></div>
+    </div>
+    <div id="doneNote" class="note" hidden>
+      <p id="doneNoteText"></p>
+      <button class="btn ghost small" id="doneOpenBtn" type="button">기록 보기</button>
+    </div>
+    <div id="resumeView" class="note" hidden>
+      <p id="resumeText"></p>
+      <button class="btn small" id="resumeBtn" type="button">이어서 하기</button>
+      <button class="btn ghost small" id="restartBtn" type="button">처음부터</button>
+    </div>
+    <div id="fileActions" class="drop-row" hidden>
+      <button class="btn" id="startBtn" type="button">받아쓰기 시작</button>
+      <label class="btn ghost pick" id="changeBtn">다른 파일<input type="file" id="fileInput2" accept="audio/*,video/*,.mp3,.m4a,.mp4,.mov,.wav,.aac,.3gp,.amr,.ogg,.opus,.webm,.flac"></label>
+    </div>
+    <p class="err" id="fileErr" hidden></p>
+    <p class="tip" id="pickHelp" hidden>파일 선택 창이 열리지 않았나요? Claude 앱 안에서는 휴대폰에 있는 파일을 고르지 못할 때가 있어요. 이 페이지 링크를 복사해서 휴대폰의 Chrome이나 Safari에서 열어 주세요.</p>
+    <div class="tip env" id="envHelp" hidden>
+      <p id="envMsg"><strong>이 브라우저에서는 Claude 화면 안에서 음성 인식 모델을 받지 못하고 있어요.</strong> 아이폰·맥 Safari의 ‘사이트 간 추적 방지’가 이 페이지에 필요한 쿠키를 막는 경우가 많아요.</p>
+      <ol id="envList">
+        <li>설정 → 앱 → Safari → ‘사이트 간 추적 방지’를 끄고 이 페이지를 새로고침하기 (받아쓰기가 끝나면 다시 켜도 돼요)</li>
+        <li>또는 컴퓨터의 Chrome·Edge에서 열기</li>
+      </ol>
+      <p class="diag" id="envDiag"></p>
+    </div>
+    <p class="tip" id="iosTip" hidden>아이폰 ‘음성 메모’ 앱의 녹음은 먼저 공유 → ‘파일에 저장’을 한 다음 여기서 고르세요.</p>
+    <p class="fine" id="fineText">mp3, m4a, mp4, mov, wav, aac · 동영상도 돼요 · 길이 제한 없음 · 처음 한 번 음성 인식 모델(약 71MB)을 받아 이 기기에 저장해요</p>
+    </div>
+    <div class="pane" id="livePane" role="tabpanel" hidden>
+      <div class="live-row">
+        <button class="btn rec-btn" id="recBtn" type="button" data-on="false"><span class="rec-dot" aria-hidden="true"></span><span id="recLabel">녹음 시작</span></button>
+        <div class="live-meta" id="liveMeta" hidden>
+          <span class="live-time" id="liveTime">0:00</span>
+          <span class="meter" aria-hidden="true"><span id="meterBar"></span></span>
+        </div>
+      </div>
+      <p class="err" id="liveErr" hidden></p>
+      <div class="drop-row" id="liveAfter" hidden>
+        <button class="btn ghost small" id="recSaveBtn" type="button">녹음 파일 저장</button>
+      </div>
+      <p class="fine">말하는 동안 말이 끊길 때마다 몇 초 안에 글자로 바뀌어요. 녹음하는 동안 이 화면을 켜 두세요. 다른 앱으로 가거나 화면이 꺼지면 녹음이 멈춰요.</p>
+    </div>
+    <p class="err" id="bootErr" hidden></p>
+  </section>
+  <script>
+  // Plain script, so it still runs if the main module fails to load: shows
+  // what went wrong instead of leaving buttons that silently do nothing.
+  (function () {
+    function show(msg) {
+      var el = document.getElementById('bootErr');
+      if (el) { el.textContent = msg; el.hidden = false; }
+    }
+    window.addEventListener('error', function (e) {
+      var m = e && e.message;
+      if (!m || /ResizeObserver|^Script error/.test(m)) return;
+      show('페이지에 문제가 생겼어요 (' + m + '). 새로고침하거나 휴대폰의 Chrome·Safari에서 열어 주세요.');
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+      setTimeout(function () {
+        if (!window.__badasseugiReady) show('페이지 기능을 불러오지 못했어요. 새로고침하거나 휴대폰의 Chrome·Safari에서 다시 열어 주세요.');
+      }, 4000);
+    });
+  })();
+  </script>
+
+  <section class="status" id="status" data-state="idle" hidden aria-live="polite">
+    <div class="stage"><span class="rec" aria-hidden="true"></span><span id="stageText">준비하는 중</span><span class="stage-sub" id="stageSub"></span></div>
+    <div class="tape" id="tape">
+      <div class="track" role="progressbar" aria-label="받아쓴 위치" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="track">
+        <div class="scan" id="scanBar"></div>
+        <div class="done" id="doneBar"></div>
+      </div>
+      <div class="ticks" id="ticks"></div>
+    </div>
+    <dl class="stats">
+      <div><dt id="lPos">받아쓴 위치</dt><dd id="sPos">–</dd></div>
+      <div><dt id="lSpeed">속도</dt><dd id="sSpeed">–</dd></div>
+      <div><dt id="lEta">남은 시간</dt><dd id="sEta">–</dd></div>
+    </dl>
+    <div class="status-actions">
+      <button class="btn ghost small" id="stopBtn" type="button">멈추기</button>
+      <span class="fine" id="awakeNote">이 화면을 켜 두세요. 다른 앱으로 가면 멈췄다가 돌아오면 이어서 해요. 페이지가 새로 열렸다면 같은 파일을 다시 고르고 ‘이어서 하기’를 누르세요.</span>
+    </div>
+  </section>
+
+  <section class="lib" id="lib" aria-label="내 기록">
+    <div class="lib-head"><h2>내 기록</h2><span class="lib-count" id="libCount"></span></div>
+    <p class="empty" id="libEmpty">받아쓴 녹음이 여기에 하나씩 저장돼요. 누르면 그 녹음의 글을 다시 볼 수 있어요.</p>
+    <ul class="lib-list" id="libList"></ul>
+    <div class="lib-foot">
+      <button class="btn ghost small" id="libMore" type="button" hidden>더 보기</button>
+      <span class="fine" id="libNote" hidden>이 브라우저에서는 기록을 저장할 수 없어요 (개인정보 보호 모드 등). 받아쓴 글은 복사해서 따로 보관해 주세요.</span>
+    </div>
+  </section>
+
+  <section class="doc" id="doc" aria-label="받아쓴 내용">
+    <div class="doc-head">
+      <h2 id="docTitle">받아쓴 내용</h2>
+      <span class="tag" id="exampleTag">예시</span>
+      <label class="toggle"><input type="checkbox" id="timesToggle" checked> 시간 표시</label>
+      <label class="toggle" id="marksToggleWrap"><input type="checkbox" id="marksToggle" checked> <span id="marksLabel">흐린 곳 표시</span></label>
+      <button class="btn ghost small" id="copyBtn" type="button">복사</button>
+      <button class="btn ghost small" id="saveBtn" type="button" hidden>.txt로 저장</button>
+    </div>
+    <p class="doc-meta" id="docMeta">파일을 고르면 받아쓴 문장이 아래처럼 시간과 함께 차례로 쌓여요. 시간을 누르면 그 부분부터 들을 수 있고, 잘 안 들려서 확실하지 않은 말에는 <mark class="unsure">밑줄</mark>이 그어져요.</p>
+    <div class="rec-bar" id="recBar" hidden>
+      <button class="btn small" id="polishBtn" type="button">Claude로 다듬기</button>
+      <button class="btn ghost small" id="renameBtn" type="button">이름 바꾸기</button>
+      <button class="btn ghost small" id="recAudioBtn" type="button" hidden>녹음 파일 저장</button>
+      <button class="btn ghost small danger" id="deleteBtn" type="button" data-armed="false">기록 삭제</button>
+    </div>
+    <form class="rename" id="renameForm" hidden>
+      <input id="renameInput" type="text" maxlength="80" aria-label="새 이름" autocomplete="off">
+      <button class="btn small" type="submit">저장</button>
+      <button class="btn ghost small" id="renameCancel" type="button">취소</button>
+    </form>
+    <section class="polish" id="polishPanel" hidden aria-label="Claude로 다듬기">
+      <div class="polish-head">
+        <strong>Claude로 다듬기</strong>
+        <button class="btn ghost small" id="polishClose" type="button">닫기</button>
+      </div>
+      <p class="polish-lede">음성 인식은 소리만 듣기 때문에, 웅얼거리거나 작게 말한 곳을 소리가 비슷한 다른 낱말로 받아쓰곤 해요. Claude가 앞뒤 흐름을 읽고 그런 낱말만 고쳐요. 내용을 새로 쓰거나 줄이지 않고, 받아쓴 글도 그대로 남아요.</p>
+      <div class="polish-direct" id="polishDirect" hidden>
+        <div class="drop-row">
+          <button class="btn small" id="polishRun" type="button">다듬기 시작</button>
+          <button class="btn ghost small" id="polishStop" type="button" hidden>멈추기</button>
+          <span class="fine" id="polishProg" aria-live="polite"></span>
+        </div>
+        <p class="fine">처음 한 번 Claude 사용을 허락해 달라는 창이 떠요. 내 Claude 사용량이 쓰여요.</p>
+        <button class="linkish" id="polishManualShow" type="button">Claude 앱에 직접 붙여 넣어서 하기</button>
+      </div>
+      <div class="polish-manual" id="polishManual">
+        <div class="step"><span class="num">1</span><div><p>요청문과 받아쓴 글을 함께 복사해요.</p><div class="part-list" id="partList"></div><p class="fine" id="partNote" hidden>글이 길어서 나눴어요. 한 부분씩 보내고 답을 받아 주세요.</p></div></div>
+        <div class="step"><span class="num">2</span><div><p>Claude 앱이나 claude.ai의 새 대화에 붙여 넣고 보내요.</p></div></div>
+        <div class="step"><span class="num">3</span><div><p>Claude가 고친 글을 복사해서 아래에 붙여 넣어요. 여러 부분이면 이어서 붙여 넣으면 돼요.</p>
+          <textarea id="polishInput" rows="5" placeholder="[00:00:02] Claude가 고친 글을 여기에 붙여 넣어요" aria-label="Claude가 고친 글"></textarea>
+          <div class="drop-row"><button class="btn small" id="polishSave" type="button">다듬은 글로 저장</button></div>
+        </div></div>
+      </div>
+      <p class="polish-msg" id="polishMsg" hidden role="status"></p>
+      <div class="drop-row"><button class="btn ghost small danger" id="polishClear" type="button" hidden>다듬은 글 지우기</button></div>
+    </section>
+    <div class="modes ver" id="verSwitch" role="tablist" aria-label="보기" hidden>
+      <button type="button" role="tab" id="verOrig" aria-selected="true">받아쓴 글</button>
+      <button type="button" role="tab" id="verPol" aria-selected="false">Claude가 다듬은 글</button>
+    </div>
+    <p class="legend" id="legend" hidden>
+      <span id="legendOrig"><mark class="unsure">이렇게</mark> 표시된 말은 잘 안 들려서 확실하지 않은 곳이에요. 누르면 그 문장부터 들려 줘요.</span>
+      <span id="legendPol" hidden><ins class="fix">이렇게</ins> 표시된 말은 Claude가 고친 곳이에요. 누르면 원래 받아쓴 말이 보여요.</span>
+    </p>
+    <div class="paras example marks" id="paras">
+      <p class="para"><button class="ts" type="button" tabindex="-1">00:00:02</button><span class="tx">그러니까 제 말은 일정을 조금 앞당기면 개발팀이 테스트할 시간이 부족할 수도 있다는 거예요. 역사적으로 보면 조선 후기에는 상업이 크게 발달하면서 새로운 계층이 등장하게 됩니다.</span></p>
+      <p class="para"><button class="ts" type="button" tabindex="-1">00:00:19</button><span class="tx">고객 문의가 늘어나면서 상담 인력을 <mark class="unsure">충원해야</mark> 한다는 의견이 많았습니다. 다음 주 화요일까지 각 팀별로 필요한 인원을 정리해서 보내주세요.</span></p>
+      <p class="para"><button class="ts" type="button" tabindex="-1">00:00:41</button><span class="tx">질문 있으신 분은 손 들어주시고요. 없으시면 오늘 수업은 여기서 마치겠습니다. 수고하셨습니다.</span></p>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Powered by Moonshine AI</strong> · 한국어 음성 인식 모델 Moonshine tiny-ko, 말소리 구간 찾기 Silero VAD, 실행 ONNX Runtime Web. 모든 계산은 이 브라우저 안에서 이뤄져요.</p>
+    <p>정확도는 녹음 상태에 따라 달라져요. 마이크가 멀거나 여러 사람이 겹쳐 말하면 틀린 글자가 늘어나요. 작게 말한 곳도 놓치지 않도록 소리 크기를 맞춰 찾고, 알아듣기 어려운 문장은 여러 후보를 견줘 다시 받아써요. 그래도 남는 잘못은 ‘Claude로 다듬기’로 앞뒤 흐름에 맞게 고칠 수 있어요.</p>
+    <details>
+      <summary>모델 라이선스 (Moonshine AI Community License)</summary>
+      <p>This Moonshine AI Model is licensed under the Moonshine AI Community License, Copyright © Moonshine AI Ltd. All Rights Reserved. 비상업적 용도와 연 매출 100만 달러 미만의 상업적 용도에 무료로 쓸 수 있어요.</p>
+      <pre id="licenseText">라이선스 전문을 불러오는 중…</pre>
+    </details>
+  </footer>
+</div>
+
+<div class="player" id="player" hidden>
+  <div class="player-in">
+    <span class="player-name" id="playerName"></span>
+    <audio id="audio" controls preload="metadata"></audio>
+  </div>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(() => {
+  // src/media.mjs
+  var OUT_SR = 16e3;
+  var PIECE_SEC = 30;
+  async function readBytes(file2, a, b) {
+    return new Uint8Array(await file2.slice(a, b).arrayBuffer());
+  }
+  var BlockReader = class {
+    constructor(file2, size2 = 1 << 22) {
+      this.file = file2;
+      this.size = size2;
+      this.start = 0;
+      this.buf = new Uint8Array(0);
+    }
+    // Returns {buf, off} such that buf[off .. off+n) are the bytes at absolute position pos.
+    async at(pos, n) {
+      if (pos < this.start || pos + n > this.start + this.buf.length) {
+        if (pos >= this.file.size) return null;
+        this.start = pos;
+        this.buf = await readBytes(this.file, pos, Math.min(this.file.size, pos + Math.max(this.size, n)));
+      }
+      if (pos + n > this.start + this.buf.length) return null;
+      return { buf: this.buf, off: pos - this.start };
+    }
+  };
+  async function tryDecode(decode2, buffer) {
+    try {
+      return { pcm: await decode2(buffer), failed: false };
+    } catch {
+      return { pcm: new Float32Array(0), failed: true };
+    }
+  }
+  function fitPiece(decoded, overlap16, expected16, want16) {
+    const missing = Math.max(0, expected16 - decoded.length);
+    const drop2 = Math.max(0, Math.min(decoded.length, overlap16 - missing));
+    const out = new Float32Array(want16);
+    out.set(decoded.subarray(drop2, Math.min(decoded.length, drop2 + want16)));
+    return out;
+  }
+  var BR = {
+    "1-1": [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
+    "1-2": [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
+    "1-3": [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+    "2-1": [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],
+    "2-2": [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]
+  };
+  BR["2-3"] = BR["2-2"];
+  var MPEG_SR = { 3: [44100, 48e3, 32e3], 2: [22050, 24e3, 16e3], 0: [11025, 12e3, 8e3] };
+  function mp3Header(b, i) {
+    if (i + 4 > b.length) return null;
+    if (b[i] !== 255 || (b[i + 1] & 224) !== 224) return null;
+    const ver = b[i + 1] >> 3 & 3;
+    const layerBits = b[i + 1] >> 1 & 3;
+    if (ver === 1 || layerBits === 0) return null;
+    const layer = 4 - layerBits;
+    const bri = b[i + 2] >> 4 & 15;
+    const sri = b[i + 2] >> 2 & 3;
+    if (bri === 0 || bri === 15 || sri === 3) return null;
+    const pad2 = b[i + 2] >> 1 & 1;
+    const sr = MPEG_SR[ver][sri];
+    const br = BR[`${ver === 3 ? 1 : 2}-${layer}`][bri] * 1e3;
+    let len, spf;
+    if (layer === 1) {
+      len = (Math.floor(12 * br / sr) + pad2) * 4;
+      spf = 384;
+    } else if (layer === 2 || ver === 3) {
+      len = Math.floor(144 * br / sr) + pad2;
+      spf = 1152;
+    } else {
+      len = Math.floor(72 * br / sr) + pad2;
+      spf = 576;
+    }
+    const ch = (b[i + 3] >> 6 & 3) === 3 ? 1 : 2;
+    return { ver, layer, sr, br, len, spf, ch };
+  }
+  function sameStream(a, b) {
+    return a && b && a.ver === b.ver && a.layer === b.layer && a.sr === b.sr;
+  }
+  async function mp3Probe(file2) {
+    const head = await readBytes(file2, 0, Math.min(file2.size, 1 << 20));
+    let p = 0;
+    if (head[0] === 73 && head[1] === 68 && head[2] === 51) {
+      const sz = (head[6] & 127) << 21 | (head[7] & 127) << 14 | (head[8] & 127) << 7 | head[9] & 127;
+      p = 10 + sz + (head[5] & 16 ? 10 : 0);
+    }
+    const blk = await readBytes(file2, p, Math.min(file2.size, p + (1 << 20)));
+    for (let i = 0; i + 4 < blk.length; i++) {
+      const h = mp3Header(blk, i);
+      if (!h) continue;
+      const h2 = mp3Header(blk, i + h.len);
+      const h3 = h2 && mp3Header(blk, i + h.len + h2.len);
+      if (!sameStream(h, h2) || !sameStream(h, h3)) continue;
+      let frames = 0;
+      const side = h.ver === 3 ? h.ch === 1 ? 17 : 32 : h.ch === 1 ? 9 : 17;
+      const x = i + 4 + side;
+      const tag = String.fromCharCode(blk[x], blk[x + 1], blk[x + 2], blk[x + 3]);
+      if ((tag === "Xing" || tag === "Info") && blk[x + 7] & 1) {
+        frames = (blk[x + 8] << 24 | blk[x + 9] << 16 | blk[x + 10] << 8 | blk[x + 11]) >>> 0;
+      }
+      const v = i + 4 + 32;
+      if (!frames && String.fromCharCode(blk[v], blk[v + 1], blk[v + 2], blk[v + 3]) === "VBRI") {
+        frames = (blk[v + 14] << 24 | blk[v + 15] << 16 | blk[v + 16] << 8 | blk[v + 17]) >>> 0;
+      }
+      const start2 = p + i + (frames ? h.len : 0);
+      const duration = frames ? frames * h.spf / h.sr : (file2.size - start2) / h.len * (h.spf / h.sr);
+      return { start: start2, first: h, duration, label: `MP3 · ${Math.round(h.br / 1e3)}kbps · ${(h.sr / 1e3).toFixed(1)}kHz` };
+    }
+    return null;
+  }
+  async function* mp3Pieces(file2, info, decode2, startSec = 0) {
+    const { sr, spf } = info.first;
+    const r = new BlockReader(file2);
+    const per = Math.max(1, Math.round(PIECE_SEC * sr / spf));
+    const skip = Math.floor(startSec * sr / spf);
+    const OV = 2;
+    let pos = info.start;
+    let frame = 0;
+    const offs = [];
+    let pieceFirst = skip;
+    const lead = [];
+    const flush = async (endPos) => {
+      if (!offs.length) return null;
+      const count = offs.length;
+      const leadIn = lead.length;
+      const from = leadIn ? lead[0] : offs[0];
+      const bytes = await readBytes(file2, from, endPos);
+      const k = OUT_SR / sr;
+      const s16 = Math.round(pieceFirst * spf * k);
+      const e16 = Math.round((pieceFirst + count) * spf * k);
+      const ov16 = Math.round(leadIn * spf * k);
+      const exp16 = Math.round((leadIn + count) * spf * k);
+      const d = await tryDecode(decode2, bytes.buffer);
+      return { start: s16 / OUT_SR, samples: fitPiece(d.pcm, ov16, exp16, e16 - s16), failed: d.failed };
+    };
+    while (true) {
+      const v = await r.at(pos, 4);
+      let h = v && mp3Header(v.buf, v.off);
+      if (h && !sameStream(h, info.first)) h = null;
+      if (!h) {
+        let found = -1;
+        for (let q = pos + 1; q < file2.size - 4 && q < pos + (1 << 20); q++) {
+          const w = await r.at(q, 4);
+          const a = w && mp3Header(w.buf, w.off);
+          if (!sameStream(a, info.first)) continue;
+          const w2 = await r.at(q + a.len, 4);
+          const b = w2 && mp3Header(w2.buf, w2.off);
+          if (sameStream(b, info.first)) {
+            found = q;
+            break;
+          }
+        }
+        if (found < 0) break;
+        pos = found;
+        continue;
+      }
+      if (pos + h.len > file2.size) break;
+      if (frame >= skip) {
+        offs.push(pos);
+        if (offs.length >= per) {
+          const piece = await flush(pos + h.len);
+          if (piece) yield piece;
+          pieceFirst = frame + 1;
+          lead.length = 0;
+          lead.push(...offs.slice(-OV));
+          offs.length = 0;
+        }
+      } else if (frame >= skip - OV) {
+        lead.push(pos);
+      }
+      frame++;
+      pos += h.len;
+    }
+    const last = await flush(pos);
+    if (last) yield last;
+  }
+  function u32(b, i) {
+    return (b[i] << 24 | b[i + 1] << 16 | b[i + 2] << 8 | b[i + 3]) >>> 0;
+  }
+  function u64(b, i) {
+    return u32(b, i) * 4294967296 + u32(b, i + 4);
+  }
+  function fourcc(b, i) {
+    return String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+  }
+  function* boxes(b, start2, end) {
+    let i = start2;
+    while (i + 8 <= end) {
+      let size2 = u32(b, i);
+      const type = fourcc(b, i + 4);
+      let hdr = 8;
+      if (size2 === 1) {
+        size2 = u64(b, i + 8);
+        hdr = 16;
+      } else if (size2 === 0) size2 = end - i;
+      if (size2 < hdr || i + size2 > end) return;
+      yield { type, start: i, data: i + hdr, end: i + size2 };
+      i += size2;
+    }
+  }
+  function child(b, box, type) {
+    for (const c of boxes(b, box.data, box.end)) if (c.type === type) return c;
+    return null;
+  }
+  function path(b, box, types) {
+    let c = box;
+    for (const t of types) {
+      c = c && child(b, c, t);
+    }
+    return c;
+  }
+  function descLen(b, i) {
+    let n = 0, k = 0;
+    for (; k < 4; k++) {
+      const c = b[i + k];
+      n = n << 7 | c & 127;
+      if (!(c & 128)) break;
+    }
+    return { n, used: k + 1 };
+  }
+  function parseEsds(b, box) {
+    let i = box.data + 4;
+    const end = box.end;
+    let oti = 0, asc = null;
+    while (i < end) {
+      const tag = b[i];
+      const { n, used } = descLen(b, i + 1);
+      const body = i + 1 + used;
+      if (tag === 3) {
+        let j = body + 2;
+        const fl = b[j];
+        j++;
+        if (fl & 128) j += 2;
+        if (fl & 64) j += 1 + b[j];
+        if (fl & 32) j += 2;
+        i = j;
+        continue;
+      }
+      if (tag === 4) {
+        oti = b[body];
+        i = body + 13;
+        continue;
+      }
+      if (tag === 5) {
+        asc = b.slice(body, body + n);
+        break;
+      }
+      i = body + n;
+    }
+    return { oti, asc };
+  }
+  var AAC_SR = [96e3, 88200, 64e3, 48e3, 44100, 32e3, 24e3, 22050, 16e3, 12e3, 11025, 8e3, 7350];
+  function parseAsc(asc) {
+    let bit = 0;
+    const rd = (n) => {
+      let v = 0;
+      for (let k = 0; k < n; k++) {
+        v = v << 1 | asc[bit >> 3] >> 7 - (bit & 7) & 1;
+        bit++;
+      }
+      return v;
+    };
+    let aot = rd(5);
+    if (aot === 31) aot = 32 + rd(6);
+    let sfi = rd(4);
+    let sr = sfi === 15 ? rd(24) : AAC_SR[sfi];
+    const ch = rd(4);
+    let core = aot;
+    if (aot === 5 || aot === 29) {
+      const e = rd(4);
+      if (e === 15) rd(24);
+      core = rd(5);
+      if (core === 31) core = 32 + rd(6);
+    }
+    return { aot: core, sfi, sr, ch };
+  }
+  function audioEntryInfo(b, entry) {
+    const codec = entry.type;
+    const ver = b[entry.data + 8] << 8 | b[entry.data + 9];
+    const info = { codec, ver, channels: b[entry.data + 16] << 8 | b[entry.data + 17], bits: b[entry.data + 18] << 8 | b[entry.data + 19], rate: u32(b, entry.data + 24) / 65536 };
+    if (ver === 2) {
+      const dv = new DataView(b.buffer, b.byteOffset + entry.data + 32, 8);
+      info.rate = dv.getFloat64(0);
+      info.channels = u32(b, entry.data + 40);
+      info.bits = u32(b, entry.data + 48);
+      info.lpcmFlags = u32(b, entry.data + 52);
+      info.bytesPerPacket = u32(b, entry.data + 56);
+    }
+    const kids = entry.data + 28 + (ver === 1 ? 16 : ver === 2 ? 36 : 0);
+    for (const c of boxes(b, kids, entry.end)) {
+      if (c.type === "esds") info.esds = parseEsds(b, c);
+      if (c.type === "pcmC") {
+        info.pcmLE = (b[c.data + 4] & 1) === 1;
+        info.bits = b[c.data + 5];
+      }
+      if (c.type === "wave") {
+        for (const w of boxes(b, c.data, c.end)) {
+          if (w.type === "esds") info.esds = parseEsds(b, w);
+          if (w.type === "enda") info.enda = (b[w.data] << 8 | b[w.data + 1]) !== 0;
+        }
+      }
+      if (c.type === "enda") info.enda = (b[c.data] << 8 | b[c.data + 1]) !== 0;
+    }
+    return info;
+  }
+  var PCM_CODECS = /* @__PURE__ */ new Set(["sowt", "twos", "raw ", "in24", "in32", "fl32", "fl64", "lpcm", "ipcm", "fpcm", "NONE"]);
+  function classify(info) {
+    const c = info.codec;
+    if (c === "mp4a" && info.esds) {
+      const oti = info.esds.oti;
+      if ((oti === 64 || oti === 102 || oti === 103 || oti === 104) && info.esds.asc) {
+        const asc = parseAsc(info.esds.asc);
+        if (asc.aot >= 1 && asc.aot <= 4 && asc.sfi < 13) return { kind: "aac", asc };
+      }
+      if (oti === 107 || oti === 105) return { kind: "mp3" };
+    }
+    if (c === ".mp3") return { kind: "mp3" };
+    if (PCM_CODECS.has(c)) {
+      let bits = info.bits || 16, float = false, le = false;
+      if (c === "sowt") {
+        bits = 16;
+        le = true;
+      } else if (c === "twos") {
+        bits = info.bits === 8 ? 8 : 16;
+      } else if (c === "raw ") {
+        bits = 8;
+      } else if (c === "in24") {
+        bits = 24;
+        le = !!info.enda;
+      } else if (c === "in32") {
+        bits = 32;
+        le = !!info.enda;
+      } else if (c === "fl32") {
+        bits = 32;
+        float = true;
+        le = !!info.enda;
+      } else if (c === "fl64") {
+        bits = 64;
+        float = true;
+        le = !!info.enda;
+      } else if (c === "lpcm") {
+        const f = info.lpcmFlags || 0;
+        float = !!(f & 1);
+        le = !(f & 2);
+      } else if (c === "ipcm" || c === "fpcm") {
+        float = c === "fpcm";
+        le = !!info.pcmLE;
+      }
+      if (![8, 16, 24, 32, 64].includes(bits) || float && bits < 32 || !info.channels || !(info.rate > 0)) return { kind: null };
+      return { kind: "pcm", pcm: { bits, float, le, unsigned: c === "raw " || c === "twos" && bits === 8 && false, ch: info.channels, rate: info.rate, frame: bits / 8 * info.channels } };
+    }
+    return { kind: null };
+  }
+  function tableSamples(b, stbl) {
+    const stsz = child(b, stbl, "stsz");
+    const stsc = child(b, stbl, "stsc");
+    const stco = child(b, stbl, "stco") || child(b, stbl, "co64");
+    const stts = child(b, stbl, "stts");
+    if (!stsz || !stsc || !stco || !stts) return null;
+    const n = u32(b, stsz.data + 8);
+    const fixed = u32(b, stsz.data + 4);
+    const sizes = new Uint32Array(n);
+    for (let i = 0; i < n; i++) sizes[i] = fixed || u32(b, stsz.data + 12 + 4 * i);
+    const nChunks = u32(b, stco.data + 4);
+    const is64 = stco.type === "co64";
+    const chunkOff = new Float64Array(nChunks);
+    for (let i = 0; i < nChunks; i++) chunkOff[i] = is64 ? u64(b, stco.data + 8 + 8 * i) : u32(b, stco.data + 8 + 4 * i);
+    const scN = u32(b, stsc.data + 4);
+    const offsets = new Float64Array(n);
+    const chunkFirst = new Int32Array(nChunks + 1);
+    let s = 0;
+    for (let e = 0; e < scN; e++) {
+      const first = u32(b, stsc.data + 8 + 12 * e) - 1;
+      const per = u32(b, stsc.data + 12 + 12 * e);
+      const next = e + 1 < scN ? u32(b, stsc.data + 8 + 12 * (e + 1)) - 1 : nChunks;
+      for (let c = first; c < next && c < nChunks; c++) {
+        chunkFirst[c] = s;
+        let o = chunkOff[c];
+        for (let k = 0; k < per && s < n; k++) {
+          offsets[s] = o;
+          o += sizes[s];
+          s++;
+        }
+      }
+    }
+    chunkFirst[nChunks] = n;
+    const times = new Float64Array(n + 1);
+    let t = 0, idx = 0;
+    const ttsN = u32(b, stts.data + 4);
+    for (let e = 0; e < ttsN; e++) {
+      const cnt = u32(b, stts.data + 8 + 8 * e);
+      const d = u32(b, stts.data + 12 + 8 * e);
+      for (let k = 0; k < cnt && idx < n; k++) {
+        times[idx++] = t;
+        t += d;
+      }
+    }
+    while (idx < n) times[idx++] = t;
+    times[n] = t;
+    return { n, fixed, sizes, offsets, times, chunkOff, chunkFirst };
+  }
+  async function fragmentSamples(file2, top, trackId, trex) {
+    const offs = [], sizes = [], durs = [];
+    for (const box of top) {
+      if (box.type !== "moof") continue;
+      const mb = await readBytes(file2, box.pos, box.pos + box.size);
+      const moof = boxes(mb, 0, mb.length).next().value;
+      if (!moof) continue;
+      for (const traf of boxes(mb, moof.data, moof.end)) {
+        if (traf.type !== "traf") continue;
+        const tfhd = child(mb, traf, "tfhd");
+        if (!tfhd) continue;
+        const flags = u32(mb, tfhd.data) & 16777215;
+        let p = tfhd.data + 4;
+        if (u32(mb, p) !== trackId) continue;
+        p += 4;
+        let base = box.pos;
+        if (flags & 1) {
+          base = u64(mb, p);
+          p += 8;
+        }
+        if (flags & 2) p += 4;
+        let dDur = trex.dur, dSize = trex.size;
+        if (flags & 8) {
+          dDur = u32(mb, p);
+          p += 4;
+        }
+        if (flags & 16) {
+          dSize = u32(mb, p);
+          p += 4;
+        }
+        let cursor = null;
+        for (const trun of boxes(mb, traf.data, traf.end)) {
+          if (trun.type !== "trun") continue;
+          const tf = u32(mb, trun.data) & 16777215;
+          let q = trun.data + 4;
+          const count = u32(mb, q);
+          q += 4;
+          let pos = cursor === null ? base : cursor;
+          if (tf & 1) {
+            pos = base + (u32(mb, q) | 0);
+            q += 4;
+          }
+          if (tf & 4) q += 4;
+          for (let i = 0; i < count; i++) {
+            let d = dDur, sz = dSize;
+            if (tf & 256) {
+              d = u32(mb, q);
+              q += 4;
+            }
+            if (tf & 512) {
+              sz = u32(mb, q);
+              q += 4;
+            }
+            if (tf & 1024) q += 4;
+            if (tf & 2048) q += 4;
+            offs.push(pos);
+            sizes.push(sz);
+            durs.push(d);
+            pos += sz;
+          }
+          cursor = pos;
+        }
+      }
+    }
+    const n = offs.length;
+    const times = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) times[i + 1] = times[i] + durs[i];
+    return { n, fixed: 0, sizes: Uint32Array.from(sizes), offsets: Float64Array.from(offs), times };
+  }
+  var CODEC_NAMES = { apac: "Apple 공간 음향(APAC)", alac: "ALAC", "ac-3": "AC-3", "ec-3": "E-AC-3", Opus: "Opus", fLaC: "FLAC", samr: "AMR", sawb: "AMR-WB", mp4a: "AAC 변형" };
+  function codecName(c) {
+    return CODEC_NAMES[c] || c;
+  }
+  async function mp4Probe(file2) {
+    const top = [];
+    let pos = 0;
+    while (pos + 8 <= file2.size && top.length < 5e5) {
+      const h = await readBytes(file2, pos, Math.min(file2.size, pos + 16));
+      let size2 = u32(h, 0);
+      const type = fourcc(h, 4);
+      if (size2 === 1) size2 = u64(h, 8);
+      else if (size2 === 0) size2 = file2.size - pos;
+      if (size2 < 8) break;
+      top.push({ type, pos, size: size2 });
+      pos += size2;
+    }
+    const moovBox = top.find((t) => t.type === "moov");
+    if (!moovBox || moovBox.size > 96 * 1024 * 1024) return null;
+    const b = await readBytes(file2, moovBox.pos, moovBox.pos + moovBox.size);
+    const moov = boxes(b, 0, b.length).next().value;
+    const trex = {};
+    const mvex = child(b, moov, "mvex");
+    if (mvex) {
+      for (const t of boxes(b, mvex.data, mvex.end)) if (t.type === "trex") trex[u32(b, t.data + 4)] = { dur: u32(b, t.data + 12), size: u32(b, t.data + 16) };
+    }
+    const fragmented = top.some((x) => x.type === "moof");
+    const tracks = [];
+    for (const trak of boxes(b, moov.data, moov.end)) {
+      if (trak.type !== "trak") continue;
+      const mdia = child(b, trak, "mdia");
+      const hdlr = mdia && child(b, mdia, "hdlr");
+      if (!hdlr || fourcc(b, hdlr.data + 8) !== "soun") continue;
+      const tkhd = child(b, trak, "tkhd");
+      const trackId = tkhd ? u32(b, tkhd.data + (b[tkhd.data] === 1 ? 20 : 12)) : 0;
+      const mdhd = child(b, mdia, "mdhd");
+      const timescale = b[mdhd.data] === 1 ? u32(b, mdhd.data + 20) : u32(b, mdhd.data + 12);
+      const stbl = path(b, mdia, ["minf", "stbl"]);
+      const stsd = stbl && child(b, stbl, "stsd");
+      const entry = stsd && boxes(b, stsd.data + 8, stsd.end).next().value;
+      if (!entry) continue;
+      const info = audioEntryInfo(b, entry);
+      const cls = classify(info);
+      tracks.push({ trackId, timescale, stbl, info, ...cls, rank: cls.kind === "aac" ? 0 : cls.kind === "mp3" ? 1 : cls.kind === "pcm" ? 2 : 9 });
+    }
+    if (!tracks.length) return { error: "noaudio" };
+    tracks.sort((x, y) => x.rank - y.rank);
+    const tr = tracks[0];
+    if (!tr.kind) return { kind: null, codec: tr.info.codec, codecs: tracks.map((x) => x.info.codec) };
+    let table = tableSamples(b, tr.stbl);
+    if ((!table || !table.n) && fragmented) table = await fragmentSamples(file2, top, tr.trackId, trex[tr.trackId] || { dur: 0, size: 0 });
+    if (!table || !table.n) return null;
+    const duration = table.times[table.n] / tr.timescale;
+    const out = { kind: tr.kind, codec: tr.info.codec, timescale: tr.timescale, duration, fragmented, ...table };
+    if (tr.kind === "aac") {
+      const asc = tr.asc;
+      out.asc = asc;
+      out.entry = mp4aEntry(tr.info.esds.asc, asc.ch || tr.info.channels || 2, asc.sr || tr.info.rate);
+      out.label = `AAC · ${((asc.sr || tr.info.rate) / 1e3).toFixed(1)}kHz`;
+    } else if (tr.kind === "mp3") {
+      out.label = "MP3 (MP4)";
+    } else {
+      out.pcm = tr.pcm;
+      out.label = `PCM ${tr.pcm.bits}bit · ${(tr.pcm.rate / 1e3).toFixed(1)}kHz`;
+      if (tr.stbl && table.chunkOff) out.pcmChunks = pcmChunks(table, tr.pcm.frame);
+      out.duration = out.pcmChunks ? out.pcmChunks.frames / tr.pcm.rate : duration;
+    }
+    if (tracks.length > 1) out.label += ` · 소리 트랙 ${tracks.length}개 중 1개`;
+    return out;
+  }
+  function pcmChunks(table, frame) {
+    const { chunkOff, chunkFirst, fixed, sizes } = table;
+    const list = [];
+    let frames = 0;
+    for (let c = 0; c < chunkOff.length; c++) {
+      const a = chunkFirst[c], z = chunkFirst[c + 1];
+      if (z <= a) continue;
+      let bytes;
+      if (fixed === 1 || fixed === frame) bytes = (z - a) * frame;
+      else {
+        bytes = 0;
+        for (let i = a; i < z; i++) bytes += sizes[i];
+      }
+      const f = Math.floor(bytes / frame);
+      list.push({ off: chunkOff[c], frames: f, start: frames });
+      frames += f;
+    }
+    return { list, frames };
+  }
+  function pcmToMono(u8, p) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const B = p.bits / 8, n = Math.floor(u8.length / p.frame), out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let acc = 0;
+      for (let c = 0; c < p.ch; c++) {
+        const o = i * p.frame + c * B;
+        let v;
+        if (p.float) v = B === 4 ? dv.getFloat32(o, p.le) : dv.getFloat64(o, p.le);
+        else if (B === 1) v = p.unsigned ? (u8[o] - 128) / 128 : dv.getInt8(o) / 128;
+        else if (B === 2) v = dv.getInt16(o, p.le) / 32768;
+        else if (B === 3) {
+          const x = p.le ? u8[o] | u8[o + 1] << 8 | u8[o + 2] << 16 : u8[o] << 16 | u8[o + 1] << 8 | u8[o + 2];
+          v = (x << 8 >> 8) / 8388608;
+        } else v = dv.getInt32(o, p.le) / 2147483648;
+        acc += v;
+      }
+      out[i] = acc / p.ch;
+    }
+    return out;
+  }
+  function resampleTo16k(x, from) {
+    if (from === OUT_SR) return x;
+    const ratio = from / OUT_SR, n = Math.floor(x.length / ratio), out = new Float32Array(n);
+    const fc = 0.5 / Math.max(1, ratio) * 0.92, half = Math.ceil(12 * Math.max(1, ratio));
+    for (let i = 0; i < n; i++) {
+      const t = i * ratio, c = Math.floor(t);
+      let acc = 0, ws = 0;
+      for (let k = c - half + 1; k <= c + half; k++) {
+        if (k < 0 || k >= x.length) continue;
+        const d = k - t;
+        const w = (0.5 + 0.5 * Math.cos(Math.PI * d / half)) * (d === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * d) / (Math.PI * d));
+        acc += x[k] * w;
+        ws += w;
+      }
+      out[i] = ws ? acc / ws : 0;
+    }
+    return out;
+  }
+  async function* pcmPieces(file2, info, startSec = 0) {
+    const p = info.pcm;
+    const per = Math.round(PIECE_SEC * p.rate);
+    const startFrame = Math.floor(startSec * p.rate);
+    const chunks = info.pcmChunks ? info.pcmChunks.list : Array.from({ length: info.n }, (_, i) => ({ off: info.offsets[i], frames: Math.floor(info.sizes[i] / p.frame), start: 0 })).map((c, i, arr) => {
+      c.start = i ? arr[i - 1].start + arr[i - 1].frames : 0;
+      return c;
+    });
+    let ci = 0;
+    while (ci < chunks.length && chunks[ci].start + chunks[ci].frames <= startFrame) ci++;
+    let carry = null;
+    let carryStart = startFrame;
+    while (ci < chunks.length) {
+      const parts = [];
+      let frames = 0;
+      const first = chunks[ci];
+      let skip = Math.max(0, carryStart - first.start);
+      while (ci < chunks.length && frames < per) {
+        const c = chunks[ci];
+        const bytes = await readBytes(file2, c.off + skip * p.frame, c.off + c.frames * p.frame);
+        parts.push(bytes);
+        frames += c.frames - skip;
+        skip = 0;
+        ci++;
+      }
+      const total = parts.reduce((s, x) => s + x.length, 0);
+      const buf = new Uint8Array(total);
+      let o = 0;
+      for (const x of parts) {
+        buf.set(x, o);
+        o += x.length;
+      }
+      const mono = pcmToMono(buf, p);
+      const s16 = Math.round(carryStart * OUT_SR / p.rate);
+      carryStart += frames;
+      const e16 = Math.round(carryStart * OUT_SR / p.rate);
+      const y = resampleTo16k(mono, p.rate);
+      const out = new Float32Array(Math.max(0, e16 - s16));
+      out.set(y.subarray(0, out.length));
+      yield { start: s16 / OUT_SR, samples: out };
+    }
+    void carry;
+  }
+  var Writer = class {
+    constructor(n = 4096) {
+      this.b = new Uint8Array(n);
+      this.dv = new DataView(this.b.buffer);
+      this.p = 0;
+    }
+    ensure(n) {
+      if (this.p + n <= this.b.length) return;
+      let m = this.b.length * 2;
+      while (m < this.p + n) m *= 2;
+      const nb = new Uint8Array(m);
+      nb.set(this.b);
+      this.b = nb;
+      this.dv = new DataView(nb.buffer);
+    }
+    u8(v) {
+      this.ensure(1);
+      this.b[this.p++] = v & 255;
+    }
+    u16(v) {
+      this.ensure(2);
+      this.dv.setUint16(this.p, v);
+      this.p += 2;
+    }
+    u32(v) {
+      this.ensure(4);
+      this.dv.setUint32(this.p, v >>> 0);
+      this.p += 4;
+    }
+    str(t) {
+      for (let i = 0; i < t.length; i++) this.u8(t.charCodeAt(i));
+    }
+    bytes(a) {
+      this.ensure(a.length);
+      this.b.set(a, this.p);
+      this.p += a.length;
+    }
+    zeros(n) {
+      this.ensure(n);
+      this.b.fill(0, this.p, this.p + n);
+      this.p += n;
+    }
+    box(type, fn) {
+      const s = this.p;
+      this.u32(0);
+      this.str(type);
+      fn();
+      this.dv.setUint32(s, this.p - s);
+    }
+    full(type, v, f, fn) {
+      this.box(type, () => {
+        this.u32((v & 255) << 24 | f & 16777215);
+        fn();
+      });
+    }
+    matrix() {
+      for (const v of [65536, 0, 0, 0, 65536, 0, 0, 0, 1073741824]) this.u32(v);
+    }
+  };
+  function mp4aEntry(ascBytes, ch, sr) {
+    const w = new Writer(256);
+    w.box("mp4a", () => {
+      w.zeros(6);
+      w.u16(1);
+      w.zeros(8);
+      w.u16(ch);
+      w.u16(16);
+      w.u16(0);
+      w.u16(0);
+      w.u32((sr <= 65535 ? sr : 0) * 65536);
+      w.full("esds", 0, 0, () => {
+        const dcd = 13 + 2 + ascBytes.length;
+        w.u8(3);
+        w.u8(3 + 2 + dcd + 3);
+        w.u16(1);
+        w.u8(0);
+        w.u8(4);
+        w.u8(dcd);
+        w.u8(64);
+        w.u8(21);
+        w.u8(0);
+        w.u16(0);
+        w.u32(0);
+        w.u32(0);
+        w.u8(5);
+        w.u8(ascBytes.length);
+        w.bytes(ascBytes);
+        w.u8(6);
+        w.u8(1);
+        w.u8(2);
+      });
+    });
+    return w.b.slice(0, w.p);
+  }
+  function muxM4A(entry, timescale, times, i0, i1, parts) {
+    const N = parts.length;
+    let total = 0;
+    for (const q of parts) total += q.length;
+    const dur = Math.max(1, Math.round(times[i1] - times[i0]));
+    const w = new Writer(2048 + N * 12);
+    w.box("ftyp", () => {
+      w.str("M4A ");
+      w.u32(0);
+      w.str("M4A ");
+      w.str("mp42");
+      w.str("isom");
+    });
+    let stco = 0;
+    w.box("moov", () => {
+      w.full("mvhd", 0, 0, () => {
+        w.u32(0);
+        w.u32(0);
+        w.u32(timescale);
+        w.u32(dur);
+        w.u32(65536);
+        w.u16(256);
+        w.zeros(10);
+        w.matrix();
+        w.zeros(24);
+        w.u32(2);
+      });
+      w.box("trak", () => {
+        w.full("tkhd", 0, 7, () => {
+          w.u32(0);
+          w.u32(0);
+          w.u32(1);
+          w.u32(0);
+          w.u32(dur);
+          w.zeros(8);
+          w.u16(0);
+          w.u16(0);
+          w.u16(256);
+          w.u16(0);
+          w.matrix();
+          w.u32(0);
+          w.u32(0);
+        });
+        w.box("mdia", () => {
+          w.full("mdhd", 0, 0, () => {
+            w.u32(0);
+            w.u32(0);
+            w.u32(timescale);
+            w.u32(dur);
+            w.u16(21956);
+            w.u16(0);
+          });
+          w.full("hdlr", 0, 0, () => {
+            w.u32(0);
+            w.str("soun");
+            w.zeros(12);
+            w.str("SoundHandler");
+            w.u8(0);
+          });
+          w.box("minf", () => {
+            w.full("smhd", 0, 0, () => {
+              w.u16(0);
+              w.u16(0);
+            });
+            w.box("dinf", () => {
+              w.full("dref", 0, 0, () => {
+                w.u32(1);
+                w.full("url ", 0, 1, () => {
+                });
+              });
+            });
+            w.box("stbl", () => {
+              w.full("stsd", 0, 0, () => {
+                w.u32(1);
+                w.bytes(entry);
+              });
+              const runs = [];
+              for (let i = i0; i < i1; i++) {
+                const d = Math.round(times[i + 1] - times[i]);
+                const r = runs[runs.length - 1];
+                if (r && r[1] === d) r[0]++;
+                else runs.push([1, d]);
+              }
+              w.full("stts", 0, 0, () => {
+                w.u32(runs.length);
+                for (const [c, d] of runs) {
+                  w.u32(c);
+                  w.u32(d);
+                }
+              });
+              w.full("stsc", 0, 0, () => {
+                w.u32(1);
+                w.u32(1);
+                w.u32(N);
+                w.u32(1);
+              });
+              w.full("stsz", 0, 0, () => {
+                w.u32(0);
+                w.u32(N);
+                for (const q of parts) w.u32(q.length);
+              });
+              w.full("stco", 0, 0, () => {
+                w.u32(1);
+                stco = w.p;
+                w.u32(0);
+              });
+            });
+          });
+        });
+      });
+    });
+    const head = w.p + 8;
+    w.dv.setUint32(stco, head);
+    const out = new Uint8Array(head + total);
+    out.set(w.b.subarray(0, w.p));
+    new DataView(out.buffer).setUint32(w.p, 8 + total);
+    out.set([109, 100, 97, 116], w.p + 4);
+    let o = head;
+    for (const q of parts) {
+      out.set(q, o);
+      o += q.length;
+    }
+    return out;
+  }
+  async function readSamples(file2, info, i0, i1) {
+    const { offsets, sizes } = info;
+    const ranges = [];
+    for (let i = i0; i < i1; i++) {
+      const a = offsets[i], z = a + sizes[i];
+      const last = ranges[ranges.length - 1];
+      if (last && a >= last.a && a - last.z < 262144) {
+        last.z = Math.max(last.z, z);
+        last.items.push(i);
+      } else ranges.push({ a, z, items: [i] });
+    }
+    const parts = [];
+    for (const rg of ranges) {
+      const bytes = await readBytes(file2, rg.a, rg.z);
+      for (const i of rg.items) parts.push(bytes.subarray(offsets[i] - rg.a, offsets[i] - rg.a + sizes[i]));
+    }
+    return parts;
+  }
+  async function* mp4Pieces(file2, info, decode2, startSec = 0) {
+    const { times, timescale } = info;
+    const n = info.sizes.length;
+    const OV = 2;
+    let i = 0;
+    const startT = startSec * timescale;
+    while (i < n && times[i + 1] <= startT) i++;
+    while (i < n) {
+      let j = i;
+      const limit = times[i] + PIECE_SEC * timescale;
+      while (j < n && times[j] < limit) j++;
+      const lead = Math.min(OV, i);
+      const parts = await readSamples(file2, info, i - lead, j);
+      let buf;
+      if (info.kind === "aac") buf = muxM4A(info.entry, timescale, times, i - lead, j, parts);
+      else {
+        let total = 0;
+        for (const q of parts) total += q.length;
+        buf = new Uint8Array(total);
+        let o = 0;
+        for (const q of parts) {
+          buf.set(q, o);
+          o += q.length;
+        }
+      }
+      const k = OUT_SR / timescale;
+      const s16 = Math.round(times[i] * k), e16 = Math.round(times[j] * k);
+      const ov16 = Math.round((times[i] - times[i - lead]) * k);
+      const exp16 = Math.round((times[j] - times[i - lead]) * k);
+      const d = await tryDecode(decode2, buf.buffer);
+      yield { start: s16 / OUT_SR, samples: fitPiece(d.pcm, ov16, exp16, e16 - s16), failed: d.failed };
+      i = j;
+    }
+  }
+  async function wavProbe(file2) {
+    const b = await readBytes(file2, 0, Math.min(file2.size, 1 << 16));
+    if (fourcc(b, 0) !== "RIFF" || fourcc(b, 8) !== "WAVE") return null;
+    let i = 12, fmt = null, data = null;
+    while (i + 8 <= b.length) {
+      const id = fourcc(b, i);
+      const sz = (b[i + 4] | b[i + 5] << 8 | b[i + 6] << 16 | b[i + 7] << 24) >>> 0;
+      if (id === "fmt ") fmt = b.slice(i + 8, i + 8 + Math.min(sz, 40));
+      if (id === "data") {
+        data = { off: i + 8, size: Math.min(sz, file2.size - i - 8) };
+        break;
+      }
+      i += 8 + sz + (sz & 1);
+    }
+    if (!fmt || !data) return null;
+    const le16 = (j) => fmt[j] | fmt[j + 1] << 8;
+    const le32 = (j) => (fmt[j] | fmt[j + 1] << 8 | fmt[j + 2] << 16 | fmt[j + 3] << 24) >>> 0;
+    const ch = le16(2), sr = le32(4), align = le16(12), bits = le16(14);
+    if (!ch || !sr || !align) return null;
+    if (data.size === 4294967295 || data.size === 0) data.size = file2.size - data.off;
+    return { fmt, data, ch, sr, align, bits, duration: data.size / align / sr, label: `WAV · ${bits}bit · ${(sr / 1e3).toFixed(1)}kHz` };
+  }
+  async function* wavPieces(file2, info, decode2, startSec = 0) {
+    const { data, align, sr, fmt } = info;
+    const frames = Math.floor(data.size / align);
+    const per = PIECE_SEC * sr;
+    for (let f = Math.floor(startSec * sr); f < frames; f += per) {
+      const cnt = Math.min(per, frames - f);
+      const body = await readBytes(file2, data.off + f * align, data.off + (f + cnt) * align);
+      const hdr = new Uint8Array(20 + fmt.length + 8);
+      const dv = new DataView(hdr.buffer);
+      hdr.set([82, 73, 70, 70], 0);
+      dv.setUint32(4, hdr.length - 8 + body.length, true);
+      hdr.set([87, 65, 86, 69, 102, 109, 116, 32], 8);
+      dv.setUint32(16, fmt.length, true);
+      hdr.set(fmt, 20);
+      hdr.set([100, 97, 116, 97], 20 + fmt.length);
+      dv.setUint32(24 + fmt.length, body.length, true);
+      const whole = new Uint8Array(hdr.length + body.length);
+      whole.set(hdr);
+      whole.set(body, hdr.length);
+      const s16 = Math.round(f * OUT_SR / sr), e16 = Math.round((f + cnt) * OUT_SR / sr);
+      const d = await tryDecode(decode2, whole.buffer);
+      yield { start: s16 / OUT_SR, samples: fitPiece(d.pcm, 0, e16 - s16, e16 - s16), failed: d.failed };
+    }
+  }
+  function adtsFrame(b, i) {
+    if (i + 7 > b.length || b[i] !== 255 || (b[i + 1] & 246) !== 240) return null;
+    const sfi = b[i + 2] >> 2 & 15;
+    if (sfi > 12) return null;
+    const len = (b[i + 3] & 3) << 11 | b[i + 4] << 3 | b[i + 5] >> 5;
+    const hdr = b[i + 1] & 1 ? 7 : 9;
+    if (len <= hdr) return null;
+    return { len, hdr, sfi, sr: AAC_SR[sfi], profile: b[i + 2] >> 6 & 3, ch: (b[i + 2] & 1) << 2 | b[i + 3] >> 6, blocks: (b[i + 6] & 3) + 1 };
+  }
+  async function adtsProbe(file2) {
+    const b = await readBytes(file2, 0, Math.min(file2.size, 1 << 16));
+    let p = 0;
+    if (b[0] === 73 && b[1] === 68 && b[2] === 51) p = 10 + ((b[6] & 127) << 21 | (b[7] & 127) << 14 | (b[8] & 127) << 7 | b[9] & 127);
+    const blk = await readBytes(file2, p, Math.min(file2.size, p + 8192));
+    const h = adtsFrame(blk, 0);
+    const h2 = h && adtsFrame(blk, h.len);
+    if (!h || !h2 || h2.sfi !== h.sfi || h.ch === 0) return null;
+    const aot = h.profile + 1;
+    const asc = new Uint8Array([aot << 3 | h.sfi >> 1, (h.sfi & 1) << 7 | h.ch << 3]);
+    return {
+      start: p,
+      sr: h.sr,
+      entry: mp4aEntry(asc, h.ch, h.sr),
+      duration: (file2.size - p) / h.len * (1024 * h.blocks / h.sr),
+      label: `AAC · ${(h.sr / 1e3).toFixed(1)}kHz`
+    };
+  }
+  async function* adtsPieces(file2, info, decode2, startSec = 0) {
+    const r = new BlockReader(file2);
+    const spf = 1024;
+    const per = Math.round(PIECE_SEC * info.sr / spf);
+    const skip = Math.floor(startSec * info.sr / spf);
+    const OV = 2;
+    let pos = info.start, frame = 0, pieceFirst = skip;
+    const offs = [], lead = [];
+    const flush = async (endPos) => {
+      if (!offs.length) return null;
+      const all = [...lead, ...offs];
+      const from = all[0];
+      const bytes = await readBytes(file2, from, endPos);
+      const parts = [];
+      for (const at of all) {
+        const q = at - from;
+        const h = adtsFrame(bytes, q);
+        if (h) parts.push(bytes.subarray(q + h.hdr, q + h.len));
+      }
+      const times = new Float64Array(parts.length + 1);
+      for (let i = 0; i <= parts.length; i++) times[i] = i * spf;
+      const m4a = muxM4A(info.entry, info.sr, times, 0, parts.length, parts);
+      const k = OUT_SR / info.sr;
+      const s16 = Math.round(pieceFirst * spf * k), e16 = Math.round((pieceFirst + offs.length) * spf * k);
+      const d = await tryDecode(decode2, m4a.buffer);
+      return { start: s16 / OUT_SR, samples: fitPiece(d.pcm, Math.round(lead.length * spf * k), Math.round((lead.length + offs.length) * spf * k), e16 - s16), failed: d.failed };
+    };
+    while (true) {
+      const v = await r.at(pos, 7);
+      const h = v && adtsFrame(v.buf, v.off);
+      if (!h || pos + h.len > file2.size) break;
+      if (frame >= skip) {
+        offs.push(pos);
+        if (offs.length >= per) {
+          const piece = await flush(pos + h.len);
+          if (piece) yield piece;
+          pieceFirst = frame + 1;
+          lead.length = 0;
+          lead.push(...offs.slice(-OV));
+          offs.length = 0;
+        }
+      } else if (frame >= skip - OV) lead.push(pos);
+      frame++;
+      pos += h.len;
+    }
+    const last = await flush(pos);
+    if (last) yield last;
+  }
+  async function* wholePieces(samples, startSec = 0) {
+    const per = PIECE_SEC * OUT_SR;
+    for (let s = Math.floor(startSec * OUT_SR); s < samples.length; s += per) {
+      yield { start: s / OUT_SR, samples: samples.slice(s, Math.min(samples.length, s + per)) };
+    }
+  }
+  var WHOLE_FILE_LIMIT = 160 * 1024 * 1024;
+  async function openMedia(file2, decode2) {
+    const head = await readBytes(file2, 0, Math.min(file2.size, 64));
+    const isMp4 = fourcc(head, 4) === "ftyp" || ["moov", "mdat", "free", "wide", "skip", "pnot"].includes(fourcc(head, 4));
+    const isWebm = head[0] === 26 && head[1] === 69 && head[2] === 223 && head[3] === 163;
+    let unsupported = null;
+    if (isMp4) {
+      const info = await mp4Probe(file2);
+      if (info && info.error === "noaudio") throw new Error("이 파일에는 소리 트랙이 없어요.");
+      if (info && info.kind === "pcm") return { kind: "mp4", label: info.label, duration: info.duration, pieces: (s) => pcmPieces(file2, info, s) };
+      if (info && info.kind) return { kind: "mp4", label: info.label, duration: info.duration, pieces: (s) => mp4Pieces(file2, info, decode2, s) };
+      if (info && info.codec) unsupported = codecName(info.codec);
+    } else if (fourcc(head, 0) === "RIFF") {
+      const info = await wavProbe(file2);
+      if (info) return { kind: "wav", label: info.label, duration: info.duration, pieces: (s) => wavPieces(file2, info, decode2, s) };
+    } else if (!isWebm) {
+      const a = await adtsProbe(file2);
+      if (a) return { kind: "aac", label: a.label, duration: a.duration, pieces: (s) => adtsPieces(file2, a, decode2, s) };
+      const m = await mp3Probe(file2);
+      if (m) return { kind: "mp3", label: m.label, duration: m.duration, pieces: (s) => mp3Pieces(file2, m, decode2, s) };
+    }
+    const what = unsupported ? `이 파일의 소리 형식(${unsupported})` : isWebm ? "이 webm 동영상" : "이 형식";
+    if (file2.size > WHOLE_FILE_LIMIT) {
+      throw new Error(`${what}은 긴 파일을 나눠 읽을 수 없어요. 녹음 앱이나 변환 앱에서 m4a·mp3로 바꿔 다시 올려 주세요.`);
+    }
+    let all;
+    try {
+      all = await decode2(await file2.arrayBuffer());
+    } catch {
+      throw new Error(unsupported ? `${what}은 이 브라우저에서 풀 수 없어요. m4a·mp3로 바꿔 다시 올려 주세요.` : "이 파일을 읽지 못했어요. mp3, m4a, mp4, mov, wav 파일인지 확인해 주세요.");
+    }
+    return { kind: "other", label: unsupported || (isWebm ? "webm" : "오디오"), duration: all.length / OUT_SR, pieces: (s) => wholePieces(all, s) };
+  }
+
+  // src/live.mjs
+  var LIVE_SR = 16e3;
+  var Downsampler = class {
+    constructor(from, to) {
+      this.pass = from === to;
+      this.ratio = from / to;
+      const r = Math.max(1, this.ratio);
+      const fc = 0.5 / r * 0.9;
+      this.H = Math.ceil(8 * r);
+      this.P = 64;
+      const H = this.H, n = 2 * H;
+      this.k = [];
+      for (let p = 0; p < this.P; p++) {
+        const f = p / this.P;
+        const w = new Float32Array(n);
+        let sum = 0;
+        for (let j = 0; j < n; j++) {
+          const d = j - H + 1 - f;
+          const win = 0.5 + 0.5 * Math.cos(Math.PI * d / H);
+          const s = d === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * d) / (Math.PI * d);
+          w[j] = win * s;
+          sum += w[j];
+        }
+        for (let j = 0; j < n; j++) w[j] /= sum;
+        this.k.push(w);
+      }
+      this.buf = new Float32Array(0);
+      this.t = 0;
+    }
+    push(x) {
+      if (this.pass) return x;
+      const buf = new Float32Array(this.buf.length + x.length);
+      buf.set(this.buf);
+      buf.set(x, this.buf.length);
+      const H = this.H, n = 2 * H;
+      const out = new Float32Array(Math.max(0, Math.ceil((buf.length - this.t) / this.ratio)));
+      let o = 0;
+      while (this.t + H < buf.length) {
+        const c = Math.floor(this.t);
+        const w = this.k[Math.min(this.P - 1, Math.round((this.t - c) * this.P))];
+        let acc = 0;
+        const base = c - H + 1;
+        for (let j = 0; j < n; j++) {
+          const i = base + j;
+          if (i >= 0) acc += buf[i] * w[j];
+        }
+        out[o++] = acc;
+        this.t += this.ratio;
+      }
+      const drop2 = Math.max(0, Math.floor(this.t) - H);
+      this.buf = buf.slice(drop2);
+      this.t -= drop2;
+      return out.subarray(0, o);
+    }
+  };
+  var LiveSource = class {
+    constructor() {
+      this.q = [];
+      this.waiter = null;
+      this.ended = false;
+      this.total = 0;
+      this.acc = [];
+      this.accLen = 0;
+    }
+    feed(y) {
+      if (this.ended || !y.length) return;
+      this.acc.push(y.slice());
+      this.accLen += y.length;
+      if (this.accLen >= LIVE_SR / 2) this.flush();
+    }
+    flush() {
+      if (!this.accLen) return;
+      const s = new Float32Array(this.accLen);
+      let o = 0;
+      for (const a of this.acc) {
+        s.set(a, o);
+        o += a.length;
+      }
+      this.acc = [];
+      this.accLen = 0;
+      this.q.push({ start: this.total / LIVE_SR, samples: s });
+      this.total += s.length;
+      this.wake();
+    }
+    end() {
+      this.flush();
+      this.ended = true;
+      this.wake();
+    }
+    wake() {
+      const w = this.waiter;
+      this.waiter = null;
+      if (w) w();
+    }
+    get seconds() {
+      return (this.total + this.accLen) / LIVE_SR;
+    }
+    async *pieces() {
+      for (; ; ) {
+        if (this.q.length) {
+          yield this.q.shift();
+          continue;
+        }
+        if (this.ended) return;
+        await new Promise((r) => {
+          this.waiter = r;
+        });
+      }
+    }
+  };
+  var TAP = `class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.b = new Float32Array(4096); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) {
+      let i = 0;
+      while (i < ch.length) {
+        const k = Math.min(ch.length - i, this.b.length - this.n);
+        this.b.set(ch.subarray(i, i + k), this.n); this.n += k; i += k;
+        if (this.n === this.b.length) { this.port.postMessage(this.b, [this.b.buffer]); this.b = new Float32Array(4096); this.n = 0; }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('tap', Tap);`;
+  function createAudioContext() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw Object.assign(new Error("unsupported"), { name: "NotSupportedError" });
+    const ctx = new AC();
+    try {
+      const p = ctx.resume();
+      if (p && p.catch) p.catch(() => {
+      });
+    } catch {
+    }
+    return ctx;
+  }
+  function pickRecorderType() {
+    if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+    for (const t of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]) {
+      try {
+        if (MediaRecorder.isTypeSupported(t)) return t;
+      } catch {
+      }
+    }
+    return "";
+  }
+  async function openMic(ctx, { onLevel } = {}) {
+    if (!window.isSecureContext) throw Object.assign(new Error("insecure"), { name: "InsecureContext" });
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error("unsupported"), { name: "NotSupportedError" });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true }
+    });
+    if (ctx.state !== "running") {
+      try {
+        await ctx.resume();
+      } catch {
+      }
+    }
+    const source = new LiveSource();
+    const down = new Downsampler(ctx.sampleRate, LIVE_SR);
+    const onChunk = (x) => {
+      if (onLevel) {
+        let e = 0;
+        for (let i = 0; i < x.length; i++) e += x[i] * x[i];
+        onLevel(Math.sqrt(e / Math.max(1, x.length)));
+      }
+      source.feed(down.push(x));
+    };
+    const mic = ctx.createMediaStreamSource(stream);
+    const sink = ctx.createGain();
+    sink.gain.value = 0;
+    sink.connect(ctx.destination);
+    let tap = null;
+    try {
+      if (!ctx.audioWorklet || typeof AudioWorkletNode === "undefined") throw new Error("no worklet");
+      const url = URL.createObjectURL(new Blob([TAP], { type: "application/javascript" }));
+      await ctx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      tap = new AudioWorkletNode(ctx, "tap", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+      tap.port.onmessage = (e) => onChunk(e.data);
+    } catch {
+      tap = ctx.createScriptProcessor(4096, 1, 1);
+      tap.onaudioprocess = (e) => onChunk(e.inputBuffer.getChannelData(0).slice());
+    }
+    mic.connect(tap);
+    tap.connect(sink);
+    const recType = pickRecorderType();
+    const chunks = [];
+    let recorder = null;
+    try {
+      recorder = new MediaRecorder(stream, recType ? { mimeType: recType, audioBitsPerSecond: 64e3 } : { audioBitsPerSecond: 64e3 });
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      recorder.start(1e4);
+    } catch {
+      recorder = null;
+    }
+    const track = stream.getAudioTracks()[0];
+    let done = null;
+    function stop() {
+      if (done) return done;
+      done = new Promise((resolve) => {
+        const finish = () => {
+          const type = recorder && recorder.mimeType || recType || "audio/webm";
+          resolve(chunks.length ? new Blob(chunks, { type: type.split(";")[0] }) : null);
+        };
+        if (recorder && recorder.state !== "inactive") {
+          recorder.onstop = finish;
+          try {
+            recorder.stop();
+          } catch {
+            finish();
+          }
+          setTimeout(finish, 4e3);
+        } else finish();
+      }).finally(() => {
+        for (const t of stream.getTracks()) {
+          try {
+            t.stop();
+          } catch {
+          }
+        }
+        try {
+          mic.disconnect();
+          tap.disconnect();
+          sink.disconnect();
+        } catch {
+        }
+        try {
+          ctx.close();
+        } catch {
+        }
+      });
+      source.end();
+      return done;
+    }
+    return { source, stop, track, ctx };
+  }
+
+  // src/main.mjs
+  var STANDALONE = true;
+  var M = STANDALONE ? "" : "models/";
+  var APP = STANDALONE ? "" : "app/";
+  var $ = (id) => document.getElementById(id);
+  var ASSET_VERSION = "v2-moonshine-tiny-ko-20260227-ort1.30.0";
+  var seq = (key, n) => Array.from({ length: n }, (_, i) => `${key}-${String(i).padStart(2, "0")}.txt`);
+  var ASSETS = STANDALONE ? [
+    { key: "wasm", parts: seq("wasm", 2), text: 4870356, bytes: 14239897, gz: true },
+    { key: "encoder", parts: seq("encoder", 5), text: 14762436, bytes: 13238176, gz: true },
+    { key: "decoder", parts: seq("decoder", 16), text: 49859060, bytes: 58327336, gz: true },
+    { key: "silero", parts: ["silero.txt"], text: 677440, bytes: 643854, gz: true },
+    { key: "tokens", parts: ["tokens.txt"], text: 549350, bytes: 549350, plain: true }
+  ] : [
+    { key: "wasm", parts: [`${M}wasm.txt`], text: 4870356, bytes: 14239897, gz: true },
+    { key: "encoder", parts: [`${M}encoder.txt`], text: 14762436, bytes: 13238176, gz: true },
+    { key: "decoder", parts: [0, 1, 2, 3].map((i) => `${M}decoder.${i}.txt`), text: 49859060, bytes: 58327336, gz: true },
+    { key: "silero", parts: [`${M}silero.txt`], text: 677440, bytes: 643854, gz: true },
+    { key: "tokens", parts: [`${M}tokens.txt`], text: 549350, bytes: 549350, plain: true }
+  ];
+  var TOTAL_TEXT = ASSETS.reduce((s, a) => s + a.text, 0);
+  var SAVE_KEY = "badasseugi:last";
+  var CANT_DECODE = "이 브라우저에서는 이 파일의 소리를 풀지 못했어요. 최신 Chrome이나 Safari에서 열거나, mp3로 바꿔서 올려 주세요.";
+  var pad = (n) => String(n).padStart(2, "0");
+  function stamp(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    return `${pad(Math.floor(sec / 3600))}:${pad(Math.floor(sec % 3600 / 60))}:${pad(sec % 60)}`;
+  }
+  function clock(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  }
+  function human(sec) {
+    if (!isFinite(sec)) return "–";
+    if (sec < 60) return "1분 안쪽";
+    const m = Math.round(sec / 60);
+    if (m < 60) return `약 ${m}분`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `약 ${h}시간 ${r}분` : `약 ${h}시간`;
+  }
+  function size(bytes) {
+    return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)}GB` : `${Math.max(1, Math.round(bytes / 1e6))}MB`;
+  }
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => {
+      t.hidden = true;
+    }, 2600);
+  }
+  var dbPromise = null;
+  function idb() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve) => {
+        let settled = false;
+        const finish = (v) => {
+          if (!settled) {
+            settled = true;
+            resolve(v);
+          }
+        };
+        setTimeout(() => finish(null), 4e3);
+        try {
+          const r = indexedDB.open("badasseugi", 2);
+          r.onupgradeneeded = () => {
+            for (const name of ["assets", "records", "audio"]) if (!r.result.objectStoreNames.contains(name)) r.result.createObjectStore(name);
+          };
+          r.onsuccess = () => finish(r.result);
+          r.onerror = () => finish(null);
+          r.onblocked = () => finish(null);
+        } catch {
+          finish(null);
+        }
+      });
+    }
+    return dbPromise;
+  }
+  function idbGet(db, key, store = "assets") {
+    return new Promise((resolve) => {
+      try {
+        const r = db.transaction(store).objectStore(store).get(key);
+        r.onsuccess = () => resolve(r.result ?? null);
+        r.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  function idbPut(db, key, val, store = "assets") {
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).put(val, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = tx.onabort = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+  function idbDel(db, key, store) {
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).delete(key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = tx.onabort = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+  function idbAll(db, store) {
+    return new Promise((resolve) => {
+      try {
+        const r = db.transaction(store).objectStore(store).getAll();
+        r.onsuccess = () => resolve(r.result || []);
+        r.onerror = () => resolve([]);
+      } catch {
+        resolve([]);
+      }
+    });
+  }
+  function idbPrune(db) {
+    try {
+      const store = db.transaction("assets", "readwrite").objectStore("assets");
+      const r = store.openKeyCursor();
+      r.onsuccess = () => {
+        const c = r.result;
+        if (!c) return;
+        if (!String(c.key).startsWith(ASSET_VERSION + "/")) store.delete(c.key);
+        c.continue();
+      };
+    } catch {
+    }
+  }
+  async function fetchPart(url, onBytes) {
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      throw new Error(`필요한 파일(${url})을 받지 못했어요 (${e && e.name || "NetworkError"}). 인터넷 연결을 확인하고 다시 시도해 주세요.`);
+    }
+    if (!res.ok) throw new Error(`필요한 파일(${url})을 받지 못했어요 (HTTP ${res.status}). 잠시 뒤 다시 시도해 주세요.`);
+    if (!res.body || !res.body.getReader) {
+      const b = new Uint8Array(await res.arrayBuffer());
+      onBytes(b.length);
+      return b;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let n = 0;
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      n += value.length;
+      onBytes(value.length);
+    }
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const c of chunks) {
+      out.set(c, o);
+      o += c.length;
+    }
+    return out;
+  }
+  var B64 = (() => {
+    const t = new Uint8Array(256).fill(255);
+    const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (let i = 0; i < 64; i++) t[abc.charCodeAt(i)] = i;
+    return t;
+  })();
+  function unbase64(src) {
+    const out = new Uint8Array(Math.floor(src.length * 3 / 4));
+    let o = 0, acc = 0, bits = 0;
+    for (let i = 0; i < src.length; i++) {
+      const v = B64[src[i]];
+      if (v === 255) continue;
+      acc = acc << 6 | v;
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        out[o++] = acc >> bits & 255;
+      }
+    }
+    return out.subarray(0, o);
+  }
+  async function gunzip(chunks) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("이 브라우저가 오래돼서 음성 인식 모델을 풀 수 없어요. 브라우저를 최신 버전으로 업데이트해 주세요.");
+    }
+    let i = 0;
+    const src = new ReadableStream({ pull(c) {
+      if (i < chunks.length) c.enqueue(chunks[i++]);
+      else c.close();
+    } });
+    return new Response(src.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  }
+  async function loadAssets(onProgress) {
+    const db = await idb();
+    let got = 0;
+    let downloaded = false;
+    const out = {};
+    await Promise.all(ASSETS.map(async (a) => {
+      const key = `${ASSET_VERSION}/${a.key}`;
+      const cached = db ? await idbGet(db, key) : null;
+      if (cached && (a.plain ? typeof cached === "string" : cached.byteLength === a.bytes)) {
+        out[a.key] = cached;
+        got += a.text;
+        onProgress(got, downloaded);
+        return;
+      }
+      downloaded = true;
+      const parts = await Promise.all(a.parts.map((p) => fetchPart(p, (d) => {
+        got += d;
+        onProgress(got, true);
+      })));
+      if (a.plain) {
+        const n = parts.reduce((t, q) => t + q.length, 0);
+        const all = new Uint8Array(n);
+        let o = 0;
+        for (const q of parts) {
+          all.set(q, o);
+          o += q.length;
+        }
+        out[a.key] = new TextDecoder().decode(all);
+      } else {
+        let buf;
+        try {
+          buf = await gunzip(parts.map(unbase64));
+        } catch (e) {
+          if (e && /브라우저/.test(e.message || "")) throw e;
+          buf = null;
+        }
+        if (!buf || buf.byteLength !== a.bytes) throw new Error("음성 인식 모델 파일이 덜 받아졌어요. 새로고침한 뒤 다시 시도해 주세요.");
+        out[a.key] = buf;
+      }
+      if (db) await idbPut(db, key, out[a.key]);
+    }));
+    if (db) idbPrune(db);
+    return out;
+  }
+  var decCtx = null;
+  var decRate = OUT_SR;
+  function decodeContext() {
+    if (decCtx) return decCtx;
+    const C = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!C) throw new Error("이 브라우저는 오디오를 풀 수 없어요. 최신 Chrome, Safari, Edge에서 열어 주세요.");
+    for (const r of [OUT_SR, 48e3, 44100]) {
+      try {
+        decCtx = new C(1, r, r);
+        decRate = r;
+        return decCtx;
+      } catch {
+      }
+    }
+    throw new Error("이 브라우저는 오디오를 풀 수 없어요.");
+  }
+  function resample(x, from, to) {
+    if (from === to) return x;
+    const ratio = from / to, n = Math.floor(x.length / ratio), out = new Float32Array(n);
+    const fc = 0.5 / ratio * 0.92, half = Math.ceil(12 * ratio);
+    for (let i = 0; i < n; i++) {
+      const t = i * ratio, c = Math.floor(t);
+      let acc = 0, ws = 0;
+      for (let k = c - half + 1; k <= c + half; k++) {
+        if (k < 0 || k >= x.length) continue;
+        const d = k - t;
+        const w = (0.5 + 0.5 * Math.cos(Math.PI * d / half)) * (d === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * d) / (Math.PI * d));
+        acc += x[k] * w;
+        ws += w;
+      }
+      out[i] = ws ? acc / ws : 0;
+    }
+    return out;
+  }
+  async function decode(arrayBuffer) {
+    const ctx = decodeContext();
+    const buf = await new Promise((resolve, reject) => {
+      try {
+        const p = ctx.decodeAudioData(arrayBuffer, resolve, reject);
+        if (p && typeof p.then === "function") p.then(resolve, reject);
+      } catch (e) {
+        reject(e);
+      }
+    });
+    const n = buf.length, C = buf.numberOfChannels;
+    let mono;
+    if (C === 1) mono = buf.getChannelData(0).slice();
+    else {
+      mono = new Float32Array(n);
+      for (let c = 0; c < C; c++) {
+        const d = buf.getChannelData(c);
+        for (let i = 0; i < n; i++) mono[i] += d[i];
+      }
+      for (let i = 0; i < n; i++) mono[i] /= C;
+    }
+    return decRate === OUT_SR ? mono : resample(mono, decRate, OUT_SR);
+  }
+  var workerUrlPromise = null;
+  function workerUrl() {
+    if (!workerUrlPromise) {
+      workerUrlPromise = (async () => {
+        const bytes = await fetchPart(`${APP}worker.js`, () => {
+        });
+        const base = new URL(`${APP}worker.js`, document.baseURI).href;
+        const blob = new Blob([`var __ORT_URL__=${JSON.stringify(base)};
+`, bytes], { type: "text/javascript" });
+        return URL.createObjectURL(blob);
+      })();
+      workerUrlPromise.catch(() => {
+        workerUrlPromise = null;
+      });
+    }
+    return workerUrlPromise;
+  }
+  var Port = class {
+    constructor(role, url) {
+      this.role = role;
+      this.busy = false;
+      this.listeners = /* @__PURE__ */ new Set();
+      try {
+        this.w = new Worker(url);
+      } catch (e) {
+        throw new Error(`작업 스레드를 만들지 못했어요 (${e && e.name || "Error"}: ${e && e.message || ""})`);
+      }
+      this.w.onmessage = (e) => {
+        for (const l of [...this.listeners]) l(e.data);
+      };
+      this.w.onerror = (e) => {
+        if (e.preventDefault) e.preventDefault();
+        for (const l of [...this.listeners]) l({ type: "error", message: e.message || "작업 스레드를 시작하지 못했어요." });
+      };
+    }
+    on(fn) {
+      this.listeners.add(fn);
+      return () => this.listeners.delete(fn);
+    }
+    post(m, transfer) {
+      this.w.postMessage(m, transfer || []);
+    }
+    once(type, job) {
+      return new Promise((resolve, reject) => {
+        const off = this.on((m) => {
+          if (m.type === type && (job == null || m.job === job)) {
+            off();
+            resolve(m);
+          } else if (m.type === "error" && m.id == null) {
+            off();
+            reject(new Error(m.message));
+          }
+        });
+      });
+    }
+    terminate() {
+      this.w.terminate();
+    }
+  };
+  var RUN_KEY = "badasseugi:run";
+  var CAP_KEY = "badasseugi:cap";
+  function plan() {
+    const cores = navigator.hardwareConcurrency || 4;
+    const mem = navigator.deviceMemory || 0;
+    const ua = navigator.userAgent || "";
+    const ios = /iPhone|iPad|iPod/i.test(ua) || navigator.maxTouchPoints > 1 && /Macintosh/.test(ua);
+    const mobile = ios || /Android|Mobile/i.test(ua);
+    let workers;
+    if (ios) workers = 2;
+    else if (mobile) workers = mem >= 4 && cores >= 6 ? 2 : 1;
+    else {
+      workers = Math.max(1, Math.min(4, cores));
+      if (!mem) workers = Math.min(workers, 3);
+      else if (mem < 8) workers = Math.min(workers, mem >= 4 ? 2 : 1);
+    }
+    let batch = 3;
+    try {
+      const cap = Number(localStorage.getItem(CAP_KEY));
+      if (cap >= 1) workers = Math.min(workers, cap);
+      const o = /^(\d)x(\d{1,2})$/.exec(localStorage.getItem("badasseugi:plan") || "");
+      if (o) {
+        workers = Math.max(1, Math.min(6, +o[1]));
+        batch = Math.max(1, Math.min(16, +o[2]));
+      }
+    } catch {
+    }
+    return { workers, batch };
+  }
+  (() => {
+    try {
+      const r = JSON.parse(localStorage.getItem(RUN_KEY) || "null");
+      if (r && r.workers > 1) localStorage.setItem(CAP_KEY, String(r.workers - 1));
+      localStorage.removeItem(RUN_KEY);
+    } catch {
+    }
+  })();
+  function markRun(on) {
+    try {
+      if (on) localStorage.setItem(RUN_KEY, JSON.stringify({ workers: engine.asr.length, at: Date.now() }));
+      else localStorage.removeItem(RUN_KEY);
+    } catch {
+    }
+  }
+  function takeBatch(queue, B, live) {
+    if (live || queue.length <= B) return queue.splice(0, B);
+    const first = queue.shift();
+    const d0 = first.audio.length;
+    const pool = queue.slice(0, B * 4).sort((a, b) => Math.abs(a.audio.length - d0) - Math.abs(b.audio.length - d0)).slice(0, B - 1);
+    const picked = new Set(pool);
+    const rest = queue.filter((x) => !picked.has(x));
+    queue.length = 0;
+    queue.push(...rest);
+    return [first, ...pool];
+  }
+  var engine = { ready: null, vad: null, asr: [], batch: 4 };
+  var batchSeq = 0;
+  var batches = /* @__PURE__ */ new Map();
+  function ensureEngine(onStage) {
+    if (engine.ready) return engine.ready;
+    engine.ready = (async () => {
+      const [assets, url] = await Promise.all([
+        loadAssets((got, downloading) => onStage({ kind: "load", got, downloading })),
+        workerUrl()
+      ]);
+      onStage({ kind: "init" });
+      const p = plan();
+      engine.batch = p.batch;
+      engine.vad = new Port("vad", url);
+      engine.vad.on((m) => {
+        if (current) current.onVad(m);
+      });
+      const inits = [];
+      engine.vad.post({ type: "init", role: "vad", wasm: assets.wasm, silero: assets.silero });
+      inits.push(engine.vad.once("ready"));
+      for (let i = 0; i < p.workers; i++) {
+        const w = new Port("asr", url);
+        w.on((m) => onAsrMessage(w, m));
+        engine.asr.push(w);
+        const msg = { type: "init", role: "asr", wasm: assets.wasm, encoder: assets.encoder, decoder: assets.decoder, tokens: assets.tokens };
+        const last = i === p.workers - 1;
+        w.post(msg, last ? [assets.wasm, assets.encoder, assets.decoder] : []);
+        inits.push(w.once("ready"));
+      }
+      try {
+        await Promise.all(inits);
+      } catch (e) {
+        throw new Error(`음성 인식 엔진을 켜지 못했어요 (${e && e.message || e})`);
+      }
+      return engine;
+    })();
+    engine.ready.catch(() => resetEngine());
+    return engine.ready;
+  }
+  function resetEngine() {
+    for (const w of [engine.vad, ...engine.asr]) if (w) w.terminate();
+    engine.vad = null;
+    engine.asr = [];
+    engine.ready = null;
+    batches.clear();
+  }
+  function onAsrMessage(port, m) {
+    if (m.type === "error" && m.id == null) {
+      if (current) {
+        current.failed = new Error(m.message || "음성 인식 작업이 멈췄어요.");
+        current.wake();
+      }
+      return;
+    }
+    if (m.type !== "result" && m.type !== "error") return;
+    port.busy = false;
+    const b = batches.get(m.type === "result" ? m.batch : m.id);
+    if (b) {
+      batches.delete(b.id);
+      b.job.onBatch(b, m);
+    }
+    if (current) current.pump();
+  }
+  var parasEl = $("paras");
+  var newPara = (cur, seg) => !cur || seg.start - cur.end > 2.5 || cur.text.length > 320;
+  function paragraphsOf(segs) {
+    const out = [];
+    let cur = null;
+    for (const [start2, end, t, unsure] of segs) {
+      const text = (t || "").trim();
+      if (!text) continue;
+      const seg = { start: start2, end, text, unsure: unsure || [] };
+      if (newPara(cur, seg)) {
+        cur = { start: start2, end, text, segs: [seg] };
+        out.push(cur);
+      } else {
+        cur.text += " " + text;
+        cur.end = end;
+        cur.segs.push(seg);
+      }
+    }
+    return out;
+  }
+  function segNode(seg, text) {
+    const span = document.createElement("span");
+    const un = seg.unsure && seg.unsure.length ? new Set(seg.unsure) : null;
+    if (!un) {
+      span.textContent = text;
+      return span;
+    }
+    text.split(" ").forEach((w, i) => {
+      if (i) span.append(" ");
+      if (!un.has(i)) {
+        span.append(w);
+        return;
+      }
+      const m = document.createElement("mark");
+      m.className = "unsure";
+      m.textContent = w;
+      m.dataset.t = String(seg.start);
+      span.append(m);
+      view.marks++;
+    });
+    return span;
+  }
+  var view = {
+    paras: [],
+    cur: null,
+    recordId: null,
+    marks: 0,
+    reset() {
+      parasEl.textContent = "";
+      parasEl.classList.remove("example");
+      this.paras = [];
+      this.cur = null;
+      this.marks = 0;
+      $("exampleTag").hidden = true;
+    },
+    para(start2) {
+      const p = document.createElement("p");
+      p.className = "para";
+      const b = document.createElement("button");
+      b.className = "ts";
+      b.type = "button";
+      b.textContent = stamp(start2);
+      b.dataset.t = String(start2);
+      const s = document.createElement("span");
+      s.className = "tx";
+      p.append(b, s);
+      parasEl.append(p);
+      return s;
+    },
+    add(seg) {
+      const text = seg.text.trim();
+      if (!text) return;
+      if (newPara(this.cur, seg)) {
+        const s = this.para(seg.start);
+        s.append(segNode(seg, text));
+        this.cur = { start: seg.start, end: seg.end, text, node: s };
+        this.paras.push(this.cur);
+      } else {
+        this.cur.text += " " + text;
+        this.cur.end = seg.end;
+        this.cur.node.append(" ", segNode(seg, text));
+      }
+    },
+    plain(withTimes) {
+      return this.paras.map((p) => withTimes ? `[${stamp(p.start)}] ${p.text}` : p.text).join("\n\n");
+    }
+  };
+  function keepText(seg, text) {
+    const t = (text || "").trim();
+    if (!t) return "";
+    const letters = t.replace(/[^\p{L}\p{N}]/gu, "");
+    if (!letters) return "";
+    if (letters.length <= 1 && seg.end - seg.start < 1.2) return "";
+    return t;
+  }
+  var current = null;
+  var jobSeq = 0;
+  var Job = class {
+    constructor({ file: file2, media: media2, startSec, prior, record }) {
+      this.id = ++jobSeq;
+      this.file = file2;
+      this.media = media2;
+      this.startSec = startSec;
+      this.record = record;
+      this.list = prior ? prior.map(([s, e, t, u]) => ({ start: s, end: e, text: t, unsure: u || [] })) : [];
+      this.queue = [];
+      this.inflight = 0;
+      this.inflightBatches = 0;
+      this.errors = 0;
+      this.scanned = startSec;
+      this.vadDone = false;
+      this.stopped = false;
+      this.failed = null;
+      this.renderIdx = this.list.length;
+      this.waiters = [];
+      this.t0 = performance.now();
+      this.decodedOk = 0;
+      this.decodeFails = 0;
+      this.lastProgress = performance.now();
+      this.limit = Math.max(60, engine.asr.length * engine.batch * 12);
+    }
+    wake() {
+      const w = this.waiters;
+      this.waiters = [];
+      for (const f of w) f();
+    }
+    // Wakes on any result, or after a few seconds so a silent worker is noticed.
+    async wait() {
+      await new Promise((r) => {
+        this.waiters.push(r);
+        setTimeout(r, 5e3);
+      });
+      if (this.inflightBatches > 0 && performance.now() - this.lastProgress > 18e4) {
+        throw new Error("음성 인식 작업이 3분 넘게 응답하지 않아요. 기기 메모리가 부족했을 수 있어요.");
+      }
+    }
+    pending() {
+      let s = 0;
+      for (const it of this.queue) s += it.audio.length / OUT_SR;
+      return s + this.inflight;
+    }
+    onVad(m) {
+      if (m.type !== "segment" || m.job !== this.id || this.stopped) return;
+      const s = m.seg;
+      const entry = { start: s.start, end: s.end, text: null };
+      this.list.push(entry);
+      this.queue.push({ entry, audio: s.audio });
+      this.pump();
+    }
+    pump() {
+      if (this !== current) return;
+      for (const w of engine.asr) {
+        if (w.busy || !this.queue.length) continue;
+        const items = takeBatch(this.queue, engine.batch, !!this.media.live);
+        const id = ++batchSeq;
+        const dur = items.reduce((s, it) => s + it.audio.length / OUT_SR, 0);
+        batches.set(id, { id, job: this, entries: items.map((it) => it.entry), dur });
+        this.inflight += dur;
+        this.inflightBatches++;
+        w.busy = true;
+        w.post({ type: "transcribe", batch: id, items: items.map((it, i) => ({ id: i, audio: it.audio })) }, items.map((it) => it.audio.buffer));
+      }
+    }
+    onBatch(b, m) {
+      this.lastProgress = performance.now();
+      this.inflightBatches--;
+      this.inflight = this.inflightBatches > 0 ? Math.max(0, this.inflight - b.dur) : 0;
+      if (m.type === "result") {
+        for (const r of m.items) {
+          const e = b.entries[r.id];
+          e.text = keepText(e, r.text);
+          e.unsure = e.text ? r.unsure || [] : [];
+        }
+      } else {
+        for (const e of b.entries) e.text = "";
+        if (++this.errors > 5) this.failed = new Error(m.message || "음성 인식 중 문제가 생겼어요.");
+      }
+      this.render();
+      this.wake();
+    }
+    render() {
+      while (this.renderIdx < this.list.length && this.list[this.renderIdx].text !== null) {
+        const e = this.list[this.renderIdx++];
+        if (e.text && this.record && view.recordId === this.record.id) view.add(e);
+      }
+      if (this.record && view.recordId === this.record.id) updateLegend();
+    }
+    donePos() {
+      if (this.renderIdx < this.list.length) return this.list[this.renderIdx].start;
+      return this.vadDone && !this.stopped ? this.media.duration : this.scanned;
+    }
+    // [start, end, text] plus the indexes of unsure words when there are any.
+    finished() {
+      return this.list.slice(0, this.renderIdx).filter((e) => e.text).map((e) => {
+        const row = [Math.round(e.start * 100) / 100, Math.round(e.end * 100) / 100, e.text];
+        if (e.unsure && e.unsure.length) row.push(e.unsure);
+        return row;
+      });
+    }
+    async run() {
+      const vad = engine.vad;
+      const it = this.media.pieces(this.startSec)[Symbol.asyncIterator]();
+      let next = it.next();
+      let started = false;
+      while (!this.stopped) {
+        const r = await next;
+        if (r.done || this.stopped) break;
+        next = it.next();
+        if (r.value.failed) {
+          this.decodeFails++;
+          if (!this.decodedOk && this.decodeFails >= 2) throw new Error(CANT_DECODE);
+        } else this.decodedOk++;
+        if (!started) {
+          vad.post({ type: "start", job: this.id, offset: r.value.start });
+          await vad.once("started", this.id);
+          started = true;
+        }
+        while (!this.stopped && this.pending() > this.limit) await this.wait();
+        if (this.stopped) break;
+        const end = r.value.start + r.value.samples.length / OUT_SR;
+        vad.post({ type: "audio", job: this.id, samples: r.value.samples }, [r.value.samples.buffer]);
+        await vad.once("consumed", this.id);
+        this.scanned = end;
+        if (this.failed) throw this.failed;
+      }
+      if (started && !this.stopped) {
+        vad.post({ type: "flush", job: this.id });
+        await vad.once("flushed", this.id);
+      }
+      this.vadDone = true;
+      while (this.queue.length && !this.stopped || this.inflightBatches > 0) {
+        await this.wait();
+        if (this.failed) throw this.failed;
+      }
+      this.render();
+    }
+    stop() {
+      this.stopped = true;
+      this.queue.length = 0;
+      this.wake();
+    }
+  };
+  var file = null;
+  var media = null;
+  var wakeLock = null;
+  var ticker = null;
+  var objectUrl = null;
+  var downloads = null;
+  var resumeTarget = null;
+  var doneTarget = null;
+  var records = [];
+  var storageOk = true;
+  var libShowAll = false;
+  var LIB_PAGE = 8;
+  function fmtDate(ms) {
+    const d = new Date(ms);
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function baseName(n) {
+    return String(n || "녹음").replace(/\.[^.]+$/, "");
+  }
+  function newRecord(kind, name, size2, duration) {
+    const now = Date.now();
+    return { id: `r${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`, kind, name, title: baseName(name), size: size2, duration, createdAt: now, updatedAt: now, status: "running", upTo: 0, segs: [], hasAudio: false };
+  }
+  function recordText(r) {
+    return (r.segs || []).map((x) => x[2]).join(" ");
+  }
+  async function loadRecords() {
+    const db = await idb();
+    if (!db) {
+      storageOk = false;
+      return;
+    }
+    records = (await idbAll(db, "records")).filter((r) => r && r.id).sort((a, b) => b.updatedAt - a.updatedAt);
+    for (const r of records) if (r.status === "running") r.status = "partial";
+    try {
+      const old = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+      if (old && old.segs && old.segs.length) {
+        const r = newRecord(old.live ? "live" : "file", old.name, old.size || 0, old.duration || 0);
+        Object.assign(r, { createdAt: old.savedAt || Date.now(), updatedAt: old.savedAt || Date.now(), status: old.done || old.live ? "done" : "partial", upTo: old.upTo || 0, segs: old.segs });
+        records.push(r);
+        records.sort((a, b) => b.updatedAt - a.updatedAt);
+        await idbPut(db, r.id, r, "records");
+      }
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+    }
+  }
+  function saveRecord(r) {
+    r.updatedAt = Date.now();
+    const i = records.indexOf(r);
+    if (i >= 0) records.splice(i, 1);
+    records.unshift(r);
+    renderLibrary();
+    if (view.recordId === r.id) renderDocMeta(r);
+    return idb().then((db) => db ? idbPut(db, r.id, r, "records") : false);
+  }
+  async function deleteRecord(r) {
+    records = records.filter((x) => x !== r);
+    const db = await idb();
+    if (db) {
+      await idbDel(db, r.id, "records");
+      await idbDel(db, r.id, "audio");
+    }
+    if (view.recordId === r.id) {
+      if (records.length) openRecord(records[0].id, { quiet: true });
+      else {
+        view.reset();
+        view.recordId = null;
+        $("docTitle").textContent = "받아쓴 내용";
+        $("docMeta").textContent = "받아쓴 기록이 없어요.";
+        $("recBar").hidden = true;
+        $("verSwitch").hidden = true;
+        $("polishPanel").hidden = true;
+        updateLegend();
+        setPlayer(null);
+      }
+    }
+    renderLibrary();
+  }
+  async function audioOf(r) {
+    const db = await idb();
+    return db ? idbGet(db, r.id, "audio") : null;
+  }
+  function statusOf(r) {
+    if (current && current.record === r && !current.stopped) return { cls: "run", text: r.kind === "live" ? "녹음 중" : "받아쓰는 중" };
+    if (r.status === "done") return { cls: "done", text: "완료" };
+    return { cls: "part", text: `${clock(r.upTo || 0)}까지` };
+  }
+  function renderLibrary() {
+    const list = $("libList");
+    list.textContent = "";
+    const shown = libShowAll ? records : records.slice(0, LIB_PAGE);
+    $("libEmpty").hidden = records.length > 0;
+    $("libCount").textContent = records.length ? `${records.length}개` : "";
+    $("libMore").hidden = libShowAll || records.length <= LIB_PAGE;
+    $("libNote").hidden = storageOk;
+    for (const r of shown) {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "lib-item";
+      b.dataset.id = r.id;
+      if (view.recordId === r.id) b.setAttribute("aria-current", "true");
+      const st = statusOf(r);
+      const title = document.createElement("span");
+      title.className = "lib-title";
+      title.textContent = r.title || r.name;
+      const chip = document.createElement("span");
+      chip.className = `chip chip-${st.cls}`;
+      chip.textContent = st.text;
+      const meta = document.createElement("span");
+      meta.className = "lib-meta";
+      meta.textContent = [fmtDate(r.createdAt), r.duration ? clock(r.duration) : null, r.kind === "live" ? "실시간 녹음" : "파일", `${recordText(r).replace(/\s/g, "").length.toLocaleString()}자`, polishedOf(r) ? "다듬음" : null].filter(Boolean).join(" · ");
+      const pv = document.createElement("span");
+      pv.className = "lib-preview";
+      pv.textContent = recordText(r).slice(0, 90) || (st.cls === "run" ? "받아쓰는 중이에요" : "받아쓴 말이 없어요");
+      b.append(title, chip, meta, pv);
+      li.append(b);
+      list.append(li);
+    }
+  }
+  function renderDocMeta(r) {
+    $("docTitle").textContent = r.title || r.name;
+    const parts = [fmtDate(r.createdAt), r.duration ? clock(r.duration) : null, r.kind === "live" ? "실시간 녹음" : r.name];
+    if (r.status !== "done" && !(current && current.record === r && !current.stopped)) parts.push(`${clock(r.upTo || 0)}까지 받아씀 · 같은 파일을 다시 고르면 이어서 할 수 있어요`);
+    $("docMeta").textContent = parts.filter(Boolean).join(" · ");
+    const running = !!(current && current.record === r && !current.stopped);
+    $("recBar").hidden = false;
+    $("recAudioBtn").hidden = !r.hasAudio;
+    $("deleteBtn").disabled = running;
+    $("polishBtn").disabled = running || !(r.segs && r.segs.length);
+  }
+  var playerUrl = null;
+  function setPlayer(url, name, owned) {
+    if (playerUrl && playerUrl !== objectUrl) URL.revokeObjectURL(playerUrl);
+    playerUrl = owned ? url : null;
+    if (!url) {
+      $("player").hidden = true;
+      $("audio").removeAttribute("src");
+      return;
+    }
+    $("audio").src = url;
+    $("audio").onerror = () => {
+      $("player").hidden = true;
+    };
+    $("playerName").textContent = name || "";
+    $("player").hidden = false;
+  }
+  function showRecord(r) {
+    view.reset();
+    view.recordId = r.id;
+    const running = !!(current && current.record === r);
+    const segs = running ? current.finished() : r.segs;
+    const pol = !running && polishedOf(r);
+    const v = pol && version === "polished" ? "polished" : "orig";
+    parasEl.dataset.ver = v;
+    if (v === "polished") renderPolished(r);
+    else for (const [st, en, t, u] of segs) view.add({ start: st, end: en, text: t, unsure: u });
+    $("verSwitch").hidden = !pol;
+    $("verOrig").setAttribute("aria-selected", String(v === "orig"));
+    $("verPol").setAttribute("aria-selected", String(v === "polished"));
+    updateLegend();
+    renderDocMeta(r);
+    syncPolishPanel(r);
+    $("renameForm").hidden = true;
+    disarmDelete();
+    renderLibrary();
+  }
+  async function openRecord(id, { quiet } = {}) {
+    const r = records.find((x) => x.id === id);
+    if (!r) return;
+    showRecord(r);
+    if (r.hasAudio) {
+      const blob = await audioOf(r);
+      if (blob && view.recordId === r.id) setPlayer(URL.createObjectURL(blob), r.title, true);
+    } else if (file && r.kind === "file" && file.name === r.name && file.size === r.size && objectUrl) setPlayer(objectUrl, file.name, false);
+    else if (!(current && current.record === r)) setPlayer(null);
+    if (!quiet) $("doc").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function openRecordNow() {
+    return records.find((x) => x.id === view.recordId) || null;
+  }
+  function disarmDelete() {
+    const b = $("deleteBtn");
+    b.dataset.armed = "false";
+    b.textContent = "기록 삭제";
+    clearTimeout(disarmDelete.t);
+  }
+  async function keepAwake(on) {
+    try {
+      if (on && "wakeLock" in navigator && document.visibilityState === "visible") {
+        wakeLock = await navigator.wakeLock.request("screen");
+      } else if (!on && wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+    } catch {
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!current || current.stopped) return;
+    if (document.visibilityState === "visible") keepAwake(true);
+    else persist(current, false);
+  });
+  window.addEventListener("pagehide", () => {
+    if (current && !current.stopped) persist(current, false);
+  });
+  function setStage(state, text, sub = "") {
+    const st = $("status");
+    st.hidden = false;
+    st.dataset.state = state;
+    $("stageText").textContent = text;
+    $("stageSub").textContent = sub;
+    $("stopBtn").hidden = state !== "run";
+    $("awakeNote").hidden = !(state === "run" || state === "load");
+  }
+  function drawTicks(total, from) {
+    const ticks = $("ticks");
+    ticks.textContent = "";
+    if (!(total > 0)) return;
+    const steps = [60, 300, 600, 900, 1800, 3600, 7200];
+    const step = steps.find((s) => total / s <= 5) || 7200;
+    const add = (t, cls) => {
+      const s = document.createElement("span");
+      s.textContent = clock(t);
+      s.style.left = `${t / total * 100}%`;
+      if (cls) s.className = cls;
+      ticks.append(s);
+    };
+    add(0);
+    for (let t = step; t < total - step * 0.45; t += step) add(t);
+    add(total, "end");
+    const mark = $("track").querySelector(".start");
+    if (mark) mark.remove();
+    if (from > 0) {
+      const m = document.createElement("div");
+      m.className = "start";
+      m.style.left = `${from / total * 100}%`;
+      $("track").append(m);
+    }
+  }
+  function setStatLabels(live) {
+    $("tape").hidden = live;
+    $("lPos").textContent = "받아쓴 위치";
+    $("lSpeed").textContent = live ? "녹음 시간" : "속도";
+    $("lEta").textContent = live ? "아직 못 받아쓴 분량" : "남은 시간";
+  }
+  function updateStats(job) {
+    if (job.media.live) {
+      const rec = job.media.duration;
+      const done2 = Math.min(job.donePos(), rec);
+      $("sPos").textContent = clock(done2);
+      $("sSpeed").textContent = clock(rec);
+      $("sEta").textContent = `${Math.max(0, Math.round(rec - done2))}초`;
+      return;
+    }
+    const total = job.media.duration || 0;
+    const done = Math.min(job.donePos(), total || Infinity);
+    const scan = Math.min(job.scanned, total || Infinity);
+    const pct = total ? Math.min(100, done / total * 100) : 0;
+    $("doneBar").style.width = `${pct}%`;
+    $("scanBar").style.width = `${total ? Math.min(100, scan / total * 100) : 0}%`;
+    $("track").setAttribute("aria-valuenow", String(Math.round(pct)));
+    $("sPos").textContent = `${clock(done)} / ${clock(total)}`;
+    const elapsed = (performance.now() - job.t0) / 1e3;
+    const progressed = done - job.startSec;
+    if (elapsed > 8 && progressed > 5) {
+      const speed = progressed / elapsed;
+      $("sSpeed").textContent = `실시간의 ${speed >= 10 ? Math.round(speed) : speed.toFixed(1)}배`;
+      $("sEta").textContent = human(Math.max(0, total - done) / speed);
+    } else {
+      $("sSpeed").textContent = "재는 중";
+      $("sEta").textContent = "재는 중";
+    }
+  }
+  function persist(job, done) {
+    const r = job.record;
+    if (!r) return;
+    r.segs = job.finished();
+    r.duration = job.media.duration;
+    r.upTo = done ? job.media.duration : job.donePos();
+    if (!done && job.stopped && job.vadDone && r.upTo >= job.media.duration - 0.5) done = true;
+    r.status = done ? "done" : job.stopped ? "partial" : "running";
+    saveRecord(r);
+  }
+  function showFile(f, m) {
+    $("pickView").hidden = true;
+    $("fileView").hidden = false;
+    $("fname").textContent = f.name;
+    $("fmeta").textContent = [m ? clock(m.duration) : null, size(f.size), m ? m.label : null].filter(Boolean).join(" · ");
+    $("fileActions").hidden = !m;
+    $("startBtn").disabled = false;
+    const same = (r) => r.kind === "file" && r.name === f.name && r.size === f.size && !(current && current.record === r && !current.stopped);
+    resumeTarget = m ? records.find((r) => same(r) && r.status !== "done" && r.upTo > 5 && r.segs && r.segs.length) || null : null;
+    doneTarget = m && !resumeTarget ? records.find((r) => same(r) && r.status === "done") || null : null;
+    $("resumeView").hidden = !resumeTarget;
+    $("startBtn").hidden = !!resumeTarget;
+    if (resumeTarget) $("resumeText").textContent = `지난번에 ${clock(resumeTarget.upTo)}까지 받아썼어요.`;
+    $("doneNote").hidden = !doneTarget;
+    if (doneTarget) $("doneNoteText").textContent = `이 파일은 ${fmtDate(doneTarget.createdAt)}에 받아쓴 기록이 있어요.`;
+  }
+  async function chooseFile(f) {
+    if (!f) return;
+    if (current && !current.stopped) {
+      toast("지금 받아쓰는 중이에요. 먼저 멈춰 주세요.");
+      return;
+    }
+    file = f;
+    media = null;
+    $("fileErr").hidden = true;
+    showFile(f, null);
+    $("fmeta").textContent = `${size(f.size)} · 살펴보는 중`;
+    try {
+      media = await openMedia(f, decode);
+      if (file !== f) return;
+      const it = media.pieces(0)[Symbol.asyncIterator]();
+      const first = await it.next();
+      if (it.return) it.return();
+      if (file !== f) return;
+      if (first.value && first.value.failed) throw new Error(CANT_DECODE);
+      showFile(f, media);
+    } catch (e) {
+      if (file !== f) return;
+      $("fileErr").textContent = e.message || "이 파일을 읽지 못했어요.";
+      $("fileErr").hidden = false;
+      $("fileActions").hidden = false;
+      $("startBtn").disabled = true;
+    }
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(f);
+    setPlayer(objectUrl, f.name, false);
+  }
+  async function start(resume) {
+    if (!file || !media) return;
+    if (liveSession) {
+      toast("녹음 중에는 파일을 받아쓸 수 없어요.");
+      return;
+    }
+    setStatLabels(false);
+    const rec = resume && resumeTarget ? resumeTarget : newRecord("file", file.name, file.size, media.duration);
+    const startSec = resume && resumeTarget ? rec.upTo : 0;
+    const prior = resume && resumeTarget ? rec.segs : null;
+    rec.status = "running";
+    $("fileActions").hidden = true;
+    $("resumeView").hidden = true;
+    $("doneNote").hidden = true;
+    showRecord(rec);
+    setPlayer(objectUrl, file.name, false);
+    drawTicks(media.duration, startSec);
+    $("doneBar").style.width = `${media.duration ? startSec / media.duration * 100 : 0}%`;
+    $("scanBar").style.width = $("doneBar").style.width;
+    $("sPos").textContent = `${clock(startSec)} / ${clock(media.duration)}`;
+    $("sSpeed").textContent = "–";
+    $("sEta").textContent = "–";
+    setStage("load", "준비하는 중");
+    keepAwake(true);
+    try {
+      await ensureEngine((s) => {
+        if (s.kind === "load") setStage("load", s.downloading ? "음성 인식 모델 받는 중" : "음성 인식 모델 불러오는 중", `${Math.round(s.got / 1e6)} / ${Math.round(TOTAL_TEXT / 1e6)}MB${s.downloading ? " · 처음 한 번만 받아요" : ""}`);
+        else setStage("load", "음성 인식 엔진 켜는 중", `${plan().workers}개 동시 처리`);
+      });
+    } catch (e) {
+      setStage("error", "시작하지 못했어요", e.message || "");
+      if (/필요한 파일/.test(e.message || "")) showEnvHelp(e.message);
+      if (!records.includes(rec)) {
+        view.recordId = null;
+        $("recBar").hidden = true;
+      }
+      $("fileActions").hidden = false;
+      keepAwake(false);
+      return;
+    }
+    const job = new Job({ file, media, startSec, prior, record: rec });
+    current = job;
+    saveRecord(rec);
+    markRun(true);
+    setStage("run", "받아쓰는 중", `${engine.asr.length}개 동시 처리`);
+    ticker = setInterval(() => {
+      updateStats(job);
+    }, 500);
+    const saver = setInterval(() => persist(job, false), 15e3);
+    let error = null;
+    try {
+      await job.run();
+    } catch (e) {
+      error = e;
+      job.stop();
+    }
+    clearInterval(ticker);
+    clearInterval(saver);
+    updateStats(job);
+    const elapsed = (performance.now() - job.t0) / 1e3;
+    if (error) {
+      resetEngine();
+      persist(job, false);
+      setStage("error", "받아쓰다가 멈췄어요", `${error.message || ""} · ${clock(job.donePos())}까지 저장했어요`);
+    } else if (job.stopped) {
+      persist(job, false);
+      setStage("stopped", "멈췄어요", `${clock(job.donePos())}까지 받아썼어요 · 같은 파일로 이어서 할 수 있어요`);
+    } else {
+      persist(job, true);
+      $("doneBar").style.width = "100%";
+      $("scanBar").style.width = "100%";
+      $("sPos").textContent = `${clock(media.duration)} / ${clock(media.duration)}`;
+      $("sEta").textContent = "끝";
+      if ($("sSpeed").textContent === "재는 중") $("sSpeed").textContent = "–";
+      setStage("done", "다 받아썼어요", `${clock(media.duration)} 분량 · ${human(elapsed).replace("약 ", "")} 걸림`);
+    }
+    markRun(false);
+    current = null;
+    if (view.recordId === rec.id) showRecord(rec);
+    if (!view.paras.length && view.recordId === rec.id) {
+      const p = document.createElement("p");
+      p.className = "empty";
+      p.textContent = "알아들을 수 있는 말소리를 찾지 못했어요. 녹음에 말소리가 담겨 있는지 확인해 주세요.";
+      parasEl.append(p);
+    }
+    renderLibrary();
+    keepAwake(false);
+    showFile(file, media);
+    $("startBtn").textContent = "다시 받아쓰기";
+  }
+  var VER_KEY = "badasseugi:ver";
+  var version = "polished";
+  try {
+    if (localStorage.getItem(VER_KEY) === "orig") version = "orig";
+  } catch {
+  }
+  var MARKS_KEY = "badasseugi:marks";
+  function updateLegend() {
+    const pol = parasEl.dataset.ver === "polished";
+    const n = pol ? parasEl.querySelectorAll("ins.fix, del.cut").length : view.marks;
+    const on = parasEl.classList.contains("marks");
+    $("marksLabel").textContent = pol ? "고친 곳 표시" : "흐린 곳 표시";
+    $("legendOrig").hidden = pol;
+    $("legendPol").hidden = !pol;
+    $("legend").hidden = !(n && on) || parasEl.classList.contains("example") || !view.recordId;
+    $("marksToggleWrap").hidden = !n && !parasEl.classList.contains("example");
+  }
+  function setMarks(on) {
+    parasEl.classList.toggle("marks", on);
+    $("marksToggle").checked = on;
+    try {
+      localStorage.setItem(MARKS_KEY, on ? "1" : "0");
+    } catch {
+    }
+    updateLegend();
+  }
+  try {
+    if (localStorage.getItem(MARKS_KEY) === "0") setMarks(false);
+  } catch {
+  }
+  $("marksToggle").addEventListener("change", (e) => setMarks(e.target.checked));
+  function polishedOf(r) {
+    return r && r.polished && r.polished.by && Object.keys(r.polished.by).length ? r.polished : null;
+  }
+  function diffInto(el, a, b) {
+    const A = a.split(/\s+/).filter(Boolean), B = b.split(/\s+/).filter(Boolean);
+    const n = A.length, m = B.length;
+    if (n * m > 4e5) {
+      el.textContent = b;
+      return 0;
+    }
+    const L = [];
+    for (let i2 = 0; i2 <= n; i2++) L.push(new Uint16Array(m + 1));
+    for (let i2 = n - 1; i2 >= 0; i2--) for (let j2 = m - 1; j2 >= 0; j2--) L[i2][j2] = A[i2] === B[j2] ? L[i2 + 1][j2 + 1] + 1 : Math.max(L[i2 + 1][j2], L[i2][j2 + 1]);
+    const pieces = [];
+    let was = [], now = [], changes = 0;
+    const flush = () => {
+      if (now.length) {
+        pieces.push({ fix: now.join(" "), was: was.join(" ") });
+        changes++;
+      } else if (was.length) {
+        pieces.push({ cut: was.join(" ") });
+        changes++;
+      }
+      was = [];
+      now = [];
+    };
+    let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && A[i] === B[j]) {
+        flush();
+        pieces.push({ same: B[j] });
+        i++;
+        j++;
+      } else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) {
+        now.push(B[j]);
+        j++;
+      } else {
+        was.push(A[i]);
+        i++;
+      }
+    }
+    flush();
+    pieces.forEach((pc, k) => {
+      if (k) el.append(" ");
+      if (pc.same !== void 0) {
+        el.append(pc.same);
+        return;
+      }
+      const x = document.createElement(pc.cut !== void 0 ? "del" : "ins");
+      x.className = pc.cut !== void 0 ? "cut" : "fix";
+      x.textContent = pc.cut !== void 0 ? pc.cut : pc.fix;
+      if (pc.was) x.dataset.was = pc.was;
+      el.append(x);
+    });
+    return changes;
+  }
+  function changeShare(a, b) {
+    const A = a.split(/\s+/).filter(Boolean), B = b.split(/\s+/).filter(Boolean);
+    if (!A.length) return B.length ? 1 : 0;
+    const n = A.length, m = B.length;
+    let prev = new Uint16Array(m + 1);
+    for (let i = 1; i <= n; i++) {
+      const cur = new Uint16Array(m + 1);
+      for (let j = 1; j <= m; j++) cur[j] = A[i - 1] === B[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+      prev = cur;
+    }
+    return 1 - prev[m] / Math.max(n, m);
+  }
+  function renderPolished(r) {
+    const by = r.polished.by;
+    for (const p of paragraphsOf(r.segs)) {
+      const s = view.para(p.start);
+      const got = by[stamp(p.start)];
+      const text = got && got[0] === p.text ? got[1] : p.text;
+      if (text !== p.text) diffInto(s, p.text, text);
+      else s.textContent = text;
+      view.paras.push({ start: p.start, end: p.end, text, node: s });
+    }
+  }
+  function setVersion(v) {
+    version = v;
+    try {
+      localStorage.setItem(VER_KEY, v);
+    } catch {
+    }
+    const r = openRecordNow();
+    if (r) showRecord(r);
+  }
+  $("verOrig").addEventListener("click", () => setVersion("orig"));
+  $("verPol").addEventListener("click", () => setVersion("polished"));
+  var sampleFn = null;
+  var polishRun = null;
+  var manualOpen = false;
+  var POLISH_RULES = [
+    "아래는 한국어 녹음을 음성 인식으로 받아쓴 글이에요. 소리가 작거나 웅얼거린 곳에서 소리가 비슷한 다른 낱말로 잘못 받아쓴 곳이 있어요.",
+    "앞뒤 흐름을 보고 잘못 받아쓴 낱말만 바로잡아 주세요.",
+    "",
+    "지켜 주세요:",
+    "- 말한 내용을 지어내거나, 빼거나, 요약하거나, 문장을 매끄럽게 고쳐 쓰지 마세요. 말투(반말·존댓말·사투리·군말)도 그대로 두세요.",
+    "- 소리가 비슷하고 앞뒤 흐름에 맞는 낱말로만 고치세요. 확신이 서지 않으면 받아쓴 그대로 두세요.",
+    "- ⟦ ⟧로 감싼 낱말은 음성 인식이 특히 자신 없어 한 곳이에요. 답할 때는 ⟦ ⟧ 표시를 지워 주세요.",
+    "- 문단마다 앞에 붙은 [00:00:00] 시간 표시와 문단 나눔은 그대로 두세요.",
+    "- 고친 글만 답해 주세요. 설명이나 인사말은 붙이지 마세요."
+  ].join("\n");
+  function markedText(p) {
+    return p.segs.map((sg) => {
+      if (!sg.unsure.length) return sg.text;
+      const un = new Set(sg.unsure);
+      return sg.text.split(" ").map((w, i) => un.has(i) ? `⟦${w}⟧` : w).join(" ");
+    }).join(" ");
+  }
+  function polishParts(r, limit) {
+    const parts = [];
+    let cur = null;
+    for (const p of paragraphsOf(r.segs)) {
+      const line = `[${stamp(p.start)}] ${markedText(p)}`;
+      if (!cur || cur.size + line.length > limit) {
+        cur = { start: p.start, end: p.end, lines: [], size: 0 };
+        parts.push(cur);
+      }
+      cur.lines.push(line);
+      cur.size += line.length + 2;
+      cur.end = p.end;
+    }
+    return parts.map((pt, k) => ({
+      start: pt.start,
+      end: pt.end,
+      prompt: `${POLISH_RULES}${parts.length > 1 ? `
+
+(글이 길어서 ${parts.length}부분으로 나눴어요. 이건 ${k + 1}번째 부분이에요.)` : ""}
+
+받아쓴 글:
+
+${pt.lines.join("\n\n")}`
+    }));
+  }
+  function parsePolished(text, dropLast) {
+    const t = String(text || "").replace(/\r/g, "").replace(/[⟦⟧]/g, "").replace(/\*\*/g, "");
+    const re = /\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g;
+    const hits = [];
+    let m;
+    while (m = re.exec(t)) {
+      const sec = m[3] !== void 0 ? +m[1] * 3600 + +m[2] * 60 + +m[3] : +m[1] * 60 + +m[2];
+      hits.push({ at: m.index, end: re.lastIndex, key: stamp(sec) });
+    }
+    const out = /* @__PURE__ */ new Map();
+    hits.forEach((h, k) => {
+      if (dropLast && k === hits.length - 1) return;
+      const body = t.slice(h.end, k + 1 < hits.length ? hits[k + 1].at : t.length).replace(/\s+/g, " ").trim();
+      if (body) out.set(h.key, body);
+    });
+    return out;
+  }
+  function mergePolished(r, found) {
+    const by = Object.assign({}, r.polished && r.polished.by || {});
+    let matched = 0, changed = 0, rewritten = 0;
+    for (const p of paragraphsOf(r.segs)) {
+      const key = stamp(p.start);
+      const t = found.get(key);
+      if (!t) continue;
+      matched++;
+      if (changeShare(p.text, t) > 0.5) {
+        rewritten++;
+        continue;
+      }
+      by[key] = [p.text, t];
+      if (t !== p.text) changed++;
+    }
+    if (matched) r.polished = { by, at: Date.now() };
+    return { matched, changed, rewritten };
+  }
+  function polishSummary(res) {
+    const parts = [];
+    parts.push(res.changed ? `문단 ${res.changed}개를 고쳤어요.` : "고칠 곳을 찾지 못했어요.");
+    if (res.rewritten) parts.push(`너무 많이 바뀐 문단 ${res.rewritten}개는 받아쓴 그대로 뒀어요.`);
+    return parts.join(" ");
+  }
+  function syncPolishPanel(r) {
+    const running = !!(current && current.record === r && !current.stopped);
+    if (running || !r || !(r.segs && r.segs.length)) {
+      $("polishPanel").hidden = true;
+      return;
+    }
+    if ($("polishPanel").hidden) return;
+    const direct = !!sampleFn;
+    $("polishDirect").hidden = !direct;
+    $("polishManual").hidden = direct && !manualOpen;
+    $("polishManualShow").hidden = !direct || manualOpen;
+    $("polishClear").hidden = !polishedOf(r);
+    const parts = polishParts(r, 6e3);
+    const list = $("partList");
+    list.textContent = "";
+    parts.forEach((pt, k) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn ghost small";
+      b.textContent = parts.length > 1 ? `${k + 1}부분 복사 · ${clock(pt.start)}–${clock(pt.end)}` : "요청문과 글 복사";
+      b.addEventListener("click", () => {
+        Promise.resolve(copyText(pt.prompt, parts.length > 1 ? `${k + 1}부분을 복사했어요. Claude에 붙여 넣어 보내 주세요.` : "복사했어요. Claude에 붙여 넣어 보내 주세요.")).then((ok) => {
+          if (ok) b.dataset.done = "true";
+        });
+      });
+      list.append(b);
+    });
+    $("partNote").hidden = parts.length < 2;
+  }
+  function polishMessage(text, isErr) {
+    const el = $("polishMsg");
+    el.textContent = text || "";
+    el.hidden = !text;
+    el.classList.toggle("err", !!isErr);
+  }
+  $("polishBtn").addEventListener("click", () => {
+    const r = openRecordNow();
+    if (!r) return;
+    const panel = $("polishPanel");
+    panel.hidden = !panel.hidden;
+    polishMessage("");
+    syncPolishPanel(r);
+    if (!panel.hidden) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+  $("polishClose").addEventListener("click", () => {
+    $("polishPanel").hidden = true;
+  });
+  $("polishManualShow").addEventListener("click", () => {
+    manualOpen = true;
+    const r = openRecordNow();
+    if (r) syncPolishPanel(r);
+  });
+  $("polishSave").addEventListener("click", async () => {
+    const r = openRecordNow();
+    if (!r) return;
+    const found = parsePolished($("polishInput").value, false);
+    if (!found.size) {
+      polishMessage("시간 표시([00:00:00])가 붙은 글을 붙여 넣어 주세요. Claude가 시간 표시를 지웠다면 지우지 말아 달라고 다시 부탁해 주세요.", true);
+      return;
+    }
+    const res = mergePolished(r, found);
+    if (!res.matched) {
+      polishMessage("이 기록과 시간 표시가 맞는 문단이 없어요. 이 기록에서 복사한 글이 맞는지 확인해 주세요.", true);
+      return;
+    }
+    await saveRecord(r);
+    $("polishInput").value = "";
+    setVersion("polished");
+    polishMessage(polishSummary(res));
+  });
+  $("polishClear").addEventListener("click", async () => {
+    const r = openRecordNow();
+    if (!r || !polishedOf(r)) return;
+    delete r.polished;
+    await saveRecord(r);
+    showRecord(r);
+    polishMessage("다듬은 글을 지웠어요. 받아쓴 글은 그대로 있어요.");
+  });
+  function setPolishBusy(on) {
+    $("polishRun").hidden = on;
+    $("polishStop").hidden = !on;
+    $("polishBtn").disabled = on;
+    if (!on) $("polishProg").textContent = "";
+  }
+  $("polishStop").addEventListener("click", () => {
+    if (polishRun) polishRun.ctl.abort();
+  });
+  $("polishRun").addEventListener("click", async () => {
+    const r = openRecordNow();
+    if (!r || !sampleFn || polishRun) return;
+    const parts = polishParts(r, 3500);
+    const ctl = new AbortController();
+    polishRun = { ctl, r };
+    setPolishBusy(true);
+    polishMessage("");
+    const found = /* @__PURE__ */ new Map();
+    let note = "", isErr = false;
+    for (let k = 0; k < parts.length && !ctl.signal.aborted; k++) {
+      const where = parts.length > 1 ? ` · ${k + 1}/${parts.length}부분` : "";
+      $("polishProg").textContent = `Claude가 읽는 중${where}`;
+      try {
+        const res = await sampleFn(parts[k].prompt, {
+          signal: ctl.signal,
+          onText: ({ text }) => {
+            $("polishProg").textContent = `고치는 중${where} · 문단 ${parsePolished(text, true).size}개`;
+          }
+        });
+        for (const [key, t] of parsePolished(res.text, res.truncated)) found.set(key, t);
+        if (res.truncated) note = "답이 길어 끝부분이 잘렸어요. 잘린 문단은 받아쓴 그대로 뒀어요.";
+      } catch (e) {
+        const code = e && e.code || "upstream_error";
+        if (e && e.text && code !== "refused") for (const [key, t] of parsePolished(e.text, true)) found.set(key, t);
+        if (code === "cancelled") note = "멈췄어요. 그때까지 고친 문단은 저장했어요.";
+        else if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(code)) {
+          sampleFn = null;
+          isErr = true;
+          note = "이 화면에서는 Claude를 부를 수 없어요. 아래처럼 복사해서 Claude 앱에 붙여 넣어 주세요.";
+        } else if (code === "rate_limited") {
+          isErr = true;
+          note = "Claude 사용량이 잠시 넘쳤어요. 조금 뒤에 다시 눌러 주세요. 고친 데까지는 저장했어요.";
+        } else if (code === "session_expired") {
+          isErr = true;
+          note = "Claude에 다시 로그인한 뒤 눌러 주세요.";
+        } else if (code === "refused") {
+          isErr = true;
+          note = "Claude가 이 부분을 고치지 않겠다고 했어요. 받아쓴 그대로 뒀어요.";
+        } else {
+          isErr = true;
+          note = "Claude와 연결이 끊겼어요. 다시 누르면 처음부터 다시 다듬어요.";
+        }
+        break;
+      }
+    }
+    polishRun = null;
+    setPolishBusy(false);
+    let msg = "";
+    if (found.size) {
+      const res = mergePolished(r, found);
+      if (res.matched) {
+        await saveRecord(r);
+        if (view.recordId === r.id) setVersion("polished");
+        msg = polishSummary(res);
+      }
+    }
+    polishMessage([msg, note].filter(Boolean).join(" "), isErr && !msg);
+    if (view.recordId === r.id) syncPolishPanel(r);
+  });
+  (async () => {
+    if (STANDALONE) return;
+    try {
+      sampleFn = window.claude && window.claude.use ? await window.claude.use("sample") : null;
+    } catch {
+      sampleFn = null;
+    }
+    const r = openRecordNow();
+    if (r && !$("polishPanel").hidden) syncPolishPanel(r);
+  })();
+  loadRecords().then(() => {
+    renderLibrary();
+    if (records.length && !view.recordId) openRecord(records[0].id, { quiet: true });
+  });
+  var UA = navigator.userAgent || "";
+  var IS_ANDROID = /Android/i.test(UA);
+  var IS_IOS = /iPhone|iPad|iPod/i.test(UA) || navigator.maxTouchPoints > 1 && /Macintosh/.test(UA);
+  if (IS_IOS) $("iosTip").hidden = false;
+  function onPicked(e) {
+    const input = e.target;
+    const f = input.files && input.files[0];
+    input.value = "";
+    $("pickHelp").hidden = true;
+    if (f) chooseFile(f);
+  }
+  function watchPicker(input) {
+    input.addEventListener("change", onPicked);
+    input.addEventListener("click", () => {
+      if (!IS_ANDROID) return;
+      let opened = false;
+      const mark = () => {
+        opened = true;
+      };
+      window.addEventListener("blur", mark, { once: true });
+      window.addEventListener("pagehide", mark, { once: true });
+      document.addEventListener("visibilitychange", mark, { once: true });
+      setTimeout(() => {
+        window.removeEventListener("blur", mark);
+        window.removeEventListener("pagehide", mark);
+        document.removeEventListener("visibilitychange", mark);
+        if (!opened && !file) $("pickHelp").hidden = false;
+      }, 3e3);
+    });
+  }
+  watchPicker($("fileInput"));
+  watchPicker($("fileInput2"));
+  $("startBtn").addEventListener("click", () => start(false));
+  $("resumeBtn").addEventListener("click", () => start(true));
+  $("restartBtn").addEventListener("click", () => start(false));
+  $("stopBtn").addEventListener("click", () => {
+    if (current) {
+      current.stop();
+      setStage("run", "멈추는 중", "처리 중인 문장까지 마무리해요");
+    }
+  });
+  var drop = $("drop");
+  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => {
+    e.preventDefault();
+    drop.classList.add("over");
+  }));
+  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+  }));
+  drop.addEventListener("drop", (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) chooseFile(f);
+  });
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+  $("timesToggle").addEventListener("change", (e) => parasEl.classList.toggle("notimes", !e.target.checked));
+  parasEl.addEventListener("click", (e) => {
+    if (parasEl.classList.contains("example")) return;
+    const fix = e.target.closest("ins.fix, del.cut");
+    if (fix && parasEl.classList.contains("marks")) {
+      if (fix.tagName === "DEL") toast(`Claude가 뺀 말: “${fix.textContent}”`);
+      else toast(fix.dataset.was ? `받아쓴 글에서는 “${fix.dataset.was}”` : "Claude가 넣은 말이에요.");
+      return;
+    }
+    const b = e.target.closest(".ts, mark.unsure");
+    if (!b || !b.dataset.t) return;
+    if (b.tagName === "MARK" && !parasEl.classList.contains("marks")) return;
+    const a = $("audio");
+    if (!a.getAttribute("src") || $("player").hidden) {
+      toast(openRecordNow() && openRecordNow().kind === "file" ? "들으려면 이 녹음 파일을 다시 골라 주세요." : "들을 수 있는 녹음 소리가 없어요.");
+      return;
+    }
+    try {
+      a.currentTime = Math.max(0, Number(b.dataset.t) - 0.3);
+      const p = a.play();
+      if (p && p.catch) p.catch(() => {
+      });
+    } catch {
+    }
+  });
+  function transcriptText() {
+    if (parasEl.classList.contains("example") || !view.paras.length) return "";
+    return view.plain($("timesToggle").checked);
+  }
+  function copyText(text, okMsg = "복사했어요.") {
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.append(ta);
+      ta.select();
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      ta.remove();
+      toast(ok ? okMsg : "복사가 막혀 있어요. 내용을 길게 눌러 직접 복사해 주세요.");
+      return ok;
+    };
+    try {
+      return navigator.clipboard.writeText(text).then(() => {
+        toast(okMsg);
+        return true;
+      }, fallback);
+    } catch {
+      return Promise.resolve(fallback());
+    }
+  }
+  $("copyBtn").addEventListener("click", () => {
+    const text = transcriptText();
+    if (!text) {
+      toast("아직 받아쓴 내용이 없어요.");
+      return;
+    }
+    copyText(text);
+  });
+  function saveBlob(name, blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener";
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 6e4);
+  }
+  $("saveBtn").addEventListener("click", async () => {
+    const text = transcriptText();
+    if (!text || !downloads && !STANDALONE) {
+      toast("아직 받아쓴 내용이 없어요.");
+      return;
+    }
+    const open = openRecordNow();
+    const base = baseName(open && open.title || file && file.name || "녹음");
+    const fname = `${base} ${parasEl.dataset.ver === "polished" ? "다듬은 글" : "받아쓰기"}.txt`;
+    if (!downloads) {
+      saveBlob(fname, new Blob([text], { type: "text/plain;charset=utf-8" }));
+      return;
+    }
+    try {
+      await downloads.save({ filename: fname, data: text });
+      toast("저장했어요.");
+    } catch (e) {
+      if (e && e.code === "declined") return;
+      if (e && (e.code === "unavailable" || e.code === "not_granted" || e.code === "capability_disabled")) {
+        $("saveBtn").hidden = true;
+        toast("여기서는 파일로 저장할 수 없어요. 복사해서 붙여 넣어 주세요.");
+        return;
+      }
+      toast("저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+    }
+  });
+  (async () => {
+    try {
+      downloads = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+    } catch {
+      downloads = null;
+    }
+    if (downloads || STANDALONE) $("saveBtn").hidden = false;
+  })();
+  fetch(`${M}LICENSE.txt`).then((r) => r.ok ? r.text() : Promise.reject()).then((t) => {
+    $("licenseText").textContent = t;
+  }, () => {
+    $("licenseText").textContent = "Moonshine AI Community License (LICENSE.txt)";
+  });
+  async function showEnvHelp(detail) {
+    $("envHelp").hidden = false;
+    if (STANDALONE) {
+      $("envMsg").textContent = "음성 인식 모델 파일을 받지 못하고 있어요. 인터넷 연결을 확인한 뒤 새로고침해 주세요.";
+      $("envList").hidden = true;
+    }
+    let framed = true;
+    try {
+      framed = window.self !== window.top;
+    } catch {
+      framed = true;
+    }
+    let access = "";
+    try {
+      if (document.hasStorageAccess) access = await document.hasStorageAccess() ? " · 쿠키 접근 있음" : " · 쿠키 접근 없음";
+    } catch {
+    }
+    $("envDiag").textContent = `진단: ${detail}${access}${framed ? " · 다른 화면 안" : " · 단독 창"}`;
+  }
+  (async () => {
+    try {
+      const r = await fetch(`${M}NOTICE.txt`, { cache: "no-store" });
+      if (!r.ok) showEnvHelp(`${M}NOTICE.txt → HTTP ${r.status}`);
+    } catch (e) {
+      showEnvHelp(`${M}NOTICE.txt → ${e && e.name || "Error"} ${e && e.message || ""}`.trim());
+    }
+  })();
+  var liveSession = null;
+  var modeLive = false;
+  function setMode(live) {
+    if (live === modeLive) return;
+    if (!live && liveSession) {
+      toast("녹음을 끝낸 뒤에 바꿀 수 있어요.");
+      return;
+    }
+    if (live && current && !current.stopped) {
+      toast("파일을 받아쓰는 중이에요. 끝난 뒤에 녹음해 주세요.");
+      return;
+    }
+    modeLive = live;
+    $("modeFile").setAttribute("aria-selected", String(!live));
+    $("modeLive").setAttribute("aria-selected", String(live));
+    $("filePane").hidden = live;
+    $("livePane").hidden = !live;
+    try {
+      localStorage.setItem("badasseugi:mode", live ? "live" : "file");
+    } catch {
+    }
+  }
+  function micErrorText(e) {
+    const n = e && e.name || "";
+    if (n === "NotAllowedError" || n === "SecurityError") {
+      return IS_IOS ? "마이크 사용이 막혀 있어요. 주소창 왼쪽의 ‘aA’(또는 페이지 메뉴) → 웹사이트 설정 → 마이크를 ‘허용’으로 바꾼 뒤 다시 눌러 주세요." : "마이크 사용이 막혀 있어요. 주소창의 자물쇠(사이트 정보) 아이콘 → 마이크를 ‘허용’으로 바꾼 뒤 다시 눌러 주세요.";
+    }
+    if (n === "NotFoundError" || n === "OverconstrainedError") return "마이크를 찾지 못했어요. 마이크가 연결돼 있는지 확인해 주세요.";
+    if (n === "NotReadableError" || n === "AbortError") return "다른 앱이 마이크를 쓰고 있어요. 통화나 녹음 앱을 끄고 다시 시도해 주세요.";
+    if (n === "InsecureContext") return "https 주소에서만 녹음할 수 있어요.";
+    if (n === "NotSupportedError") return "이 브라우저는 녹음을 지원하지 않아요. 최신 Safari나 Chrome에서 열어 주세요.";
+    return `녹음을 시작하지 못했어요 (${n || e && e.message || "알 수 없는 오류"}).`;
+  }
+  function setRecButton(state) {
+    const b = $("recBtn");
+    b.dataset.on = String(state === "on");
+    b.disabled = state === "finishing";
+    $("recLabel").textContent = state === "on" ? "녹음 끝내기" : state === "finishing" ? "마무리하는 중" : "녹음 시작";
+  }
+  function recExt(type) {
+    return /mp4|aac|m4a/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : "webm";
+  }
+  async function startLive() {
+    if (liveSession) return;
+    if (current && !current.stopped) {
+      toast("파일을 받아쓰는 중이에요. 끝난 뒤에 녹음해 주세요.");
+      return;
+    }
+    $("liveErr").hidden = true;
+    $("liveAfter").hidden = true;
+    let ctx;
+    try {
+      ctx = createAudioContext();
+    } catch (e) {
+      $("liveErr").textContent = micErrorText(e);
+      $("liveErr").hidden = false;
+      return;
+    }
+    setRecButton("finishing");
+    $("recLabel").textContent = "마이크 켜는 중";
+    let level = 0;
+    let mic;
+    try {
+      mic = await openMic(ctx, { onLevel: (v) => {
+        level = Math.max(v, level * 0.85);
+      } });
+    } catch (e) {
+      try {
+        ctx.close();
+      } catch {
+      }
+      setRecButton("off");
+      $("liveErr").textContent = micErrorText(e);
+      $("liveErr").hidden = false;
+      return;
+    }
+    const at = /* @__PURE__ */ new Date();
+    const name = `실시간 녹음 ${at.getMonth() + 1}월 ${at.getDate()}일 ${pad(at.getHours())}-${pad(at.getMinutes())}`;
+    const session = { mic, name, blob: null, finishing: false };
+    liveSession = session;
+    setRecButton("on");
+    $("liveMeta").hidden = false;
+    setPlayer(null);
+    const meter = setInterval(() => {
+      $("liveTime").textContent = clock(mic.source.seconds);
+      $("meterBar").style.width = `${Math.min(100, Math.round(Math.sqrt(level) * 260))}%`;
+      level *= 0.7;
+    }, 200);
+    mic.track.addEventListener("ended", () => finishLive("ended"));
+    view.reset();
+    view.recordId = null;
+    $("docTitle").textContent = name;
+    $("docMeta").textContent = "녹음 중이에요. 음성 인식이 준비되면 글자가 나오기 시작해요.";
+    $("recBar").hidden = true;
+    renderLibrary();
+    setStatLabels(true);
+    $("sPos").textContent = "0:00";
+    $("sSpeed").textContent = "0:00";
+    $("sEta").textContent = "0초";
+    setStage("load", "녹음은 시작됐어요", "음성 인식을 준비하는 동안에도 계속 말씀하셔도 돼요");
+    $("awakeNote").hidden = true;
+    keepAwake(true);
+    const liveMedia = { live: true, label: "실시간 녹음", get duration() {
+      return mic.source.seconds;
+    }, pieces: () => mic.source.pieces() };
+    try {
+      await ensureEngine((st) => {
+        if (st.kind === "load") setStage("load", st.downloading ? "녹음 중 · 음성 인식 모델 받는 중" : "녹음 중 · 음성 인식 준비 중", `${Math.round(st.got / 1e6)} / ${Math.round(TOTAL_TEXT / 1e6)}MB${st.downloading ? " · 처음 한 번만 받아요" : ""}`);
+        else setStage("load", "녹음 중 · 음성 인식 엔진 켜는 중", "");
+        $("awakeNote").hidden = true;
+      });
+    } catch (e) {
+      clearInterval(meter);
+      await session.mic.stop();
+      liveSession = null;
+      setRecButton("off");
+      $("liveMeta").hidden = true;
+      setStage("error", "음성 인식을 시작하지 못했어요", e.message || "");
+      if (/필요한 파일/.test(e.message || "")) showEnvHelp(e.message);
+      keepAwake(false);
+      return;
+    }
+    const rec = newRecord("live", name, 0, 0);
+    const job = new Job({ file: { name, size: 0 }, media: liveMedia, startSec: 0, prior: null, record: rec });
+    current = job;
+    showRecord(rec);
+    saveRecord(rec);
+    markRun(true);
+    const runningStage = () => {
+      if (!session.finishing) {
+        setStage("run", "녹음하면서 받아쓰는 중", "말이 끊길 때마다 몇 초 안에 글자가 나와요");
+        $("stopBtn").hidden = true;
+        $("awakeNote").hidden = true;
+      }
+    };
+    runningStage();
+    ticker = setInterval(() => updateStats(job), 500);
+    const saver = setInterval(() => persist(job, false), 15e3);
+    let error = null;
+    try {
+      await job.run();
+    } catch (e) {
+      error = e;
+      job.stop();
+    }
+    clearInterval(ticker);
+    clearInterval(saver);
+    clearInterval(meter);
+    if (!session.finishing) await finishLive("error");
+    const blob = await session.mic.stop();
+    session.blob = blob;
+    updateStats(job);
+    const dur = mic.source.seconds;
+    if (blob) {
+      rec.hasAudio = true;
+      rec.audioType = blob.type;
+      const db = await idb();
+      if (db && !await idbPut(db, rec.id, blob, "audio")) rec.hasAudio = false;
+    }
+    markRun(false);
+    if (error) {
+      resetEngine();
+      persist(job, false);
+      setStage("error", "받아쓰다가 멈췄어요", `${error.message || ""} · 받아쓴 데까지는 남아 있어요`);
+    } else {
+      persist(job, true);
+      setStage("done", "녹음과 받아쓰기를 마쳤어요", `${clock(dur)} 녹음${session.reason === "ended" ? " · 화면을 벗어나서 녹음이 멈췄어요" : ""}`);
+    }
+    current = null;
+    liveSession = null;
+    if (view.recordId === rec.id) showRecord(rec);
+    if (!view.paras.length && view.recordId === rec.id) {
+      const p = document.createElement("p");
+      p.className = "empty";
+      p.textContent = "알아들을 수 있는 말소리가 없었어요. 마이크 가까이에서 다시 녹음해 보세요.";
+      parasEl.append(p);
+    }
+    if (blob) {
+      if (view.recordId === rec.id) setPlayer(URL.createObjectURL(blob), rec.title, true);
+      $("liveAfter").hidden = false;
+    }
+    renderLibrary();
+    lastLive = session;
+    setRecButton("off");
+    $("liveMeta").hidden = true;
+    keepAwake(false);
+  }
+  var lastLive = null;
+  async function finishLive(reason) {
+    const s = liveSession;
+    if (!s || s.finishing) return;
+    s.finishing = true;
+    s.reason = reason;
+    setRecButton("finishing");
+    if (current && current.media.live) setStage("run", "마무리하는 중", "마지막 문장까지 받아쓰고 있어요");
+    $("stopBtn").hidden = true;
+    await s.mic.stop();
+  }
+  if (STANDALONE) {
+    $("modes").hidden = false;
+    $("modeFile").addEventListener("click", () => setMode(false));
+    $("modeLive").addEventListener("click", () => setMode(true));
+    try {
+      if (localStorage.getItem("badasseugi:mode") === "live") setMode(true);
+    } catch {
+    }
+    $("recBtn").addEventListener("click", () => {
+      if (liveSession) finishLive("button");
+      else startLive();
+    });
+    $("recSaveBtn").addEventListener("click", () => {
+      const s = lastLive;
+      if (!s || !s.blob) {
+        toast("저장할 녹음이 없어요.");
+        return;
+      }
+      saveBlob(`${s.name}.${recExt(s.blob.type)}`, s.blob);
+    });
+    document.addEventListener("visibilitychange", () => {
+      const s = liveSession;
+      if (!s || s.finishing || document.visibilityState !== "visible") return;
+      if (s.mic.track.readyState === "ended") {
+        finishLive("ended");
+        return;
+      }
+      if (s.mic.ctx.state !== "running") {
+        s.mic.ctx.resume().then(() => {
+          if (s.mic.ctx.state !== "running") finishLive("ended");
+        }, () => finishLive("ended"));
+      }
+    });
+  }
+  $("libList").addEventListener("click", (e) => {
+    const b = e.target.closest(".lib-item");
+    if (b) openRecord(b.dataset.id);
+  });
+  $("libMore").addEventListener("click", () => {
+    libShowAll = true;
+    renderLibrary();
+  });
+  $("doneOpenBtn").addEventListener("click", () => {
+    if (doneTarget) openRecord(doneTarget.id);
+  });
+  $("renameBtn").addEventListener("click", () => {
+    const r = openRecordNow();
+    if (!r) return;
+    $("renameInput").value = r.title || "";
+    $("renameForm").hidden = false;
+    $("renameInput").focus();
+    $("renameInput").select();
+  });
+  $("renameCancel").addEventListener("click", () => {
+    $("renameForm").hidden = true;
+  });
+  $("renameForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const r = openRecordNow();
+    const v = $("renameInput").value.trim();
+    if (r && v) {
+      r.title = v.slice(0, 80);
+      saveRecord(r);
+      toast("이름을 바꿨어요.");
+    }
+    $("renameForm").hidden = true;
+  });
+  $("deleteBtn").addEventListener("click", () => {
+    const b = $("deleteBtn");
+    const r = openRecordNow();
+    if (!r || b.disabled) return;
+    if (b.dataset.armed !== "true") {
+      b.dataset.armed = "true";
+      b.textContent = "한 번 더 누르면 삭제돼요";
+      clearTimeout(disarmDelete.t);
+      disarmDelete.t = setTimeout(disarmDelete, 4e3);
+      return;
+    }
+    disarmDelete();
+    deleteRecord(r).then(() => toast("기록을 지웠어요."));
+  });
+  $("recAudioBtn").addEventListener("click", async () => {
+    const r = openRecordNow();
+    const blob = r && r.hasAudio ? await audioOf(r) : null;
+    if (!blob) {
+      toast("저장된 녹음 소리가 없어요.");
+      return;
+    }
+    saveBlob(`${baseName(r.title)}.${recExt(blob.type || r.audioType || "")}`, blob);
+  });
+  window.__badasseugiReady = true;
+})();
+
+</script>
+
+</body>
+</html>

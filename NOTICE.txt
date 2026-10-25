@@ -1,0 +1,4 @@
+This Moonshine AI Model is licensed under the Moonshine AI Community License, Copyright © Moonshine AI Ltd. All Rights Reserved.
+
+Model: Moonshine tiny-ko (quantized ORT export, sherpa-onnx-moonshine-tiny-ko-quantized-2026-02-27).
+Changes: none to the weights. The decoder file is split into four byte-range parts (decoder.0.bin … decoder.3.bin) for hosting; the page joins them back into the original file before use.
